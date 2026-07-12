@@ -1,0 +1,24 @@
+{
+  "id": "taxonomy-showcase",
+  "eyebrow": "SYSTEM MAP: HOW THE AGENT STACK IS ORGANIZED",
+  "headline": "Every agent we ship is the same three layers — perception, reasoning, action",
+  "visualization": {
+    "kind": "taxonomy",
+    "caption": "the agent stack, by layer",
+    "rootLabel": "Agent stack",
+    "mode": "curve",
+    "categories": [
+      { "label": "Perception", "accent": "cyan", "children": [ { "label": "Vision" }, { "label": "Audio" }, { "label": "Parsing" } ] },
+      { "label": "Reasoning", "accent": "violet", "children": [ { "label": "Planning" }, { "label": "Memory" }, { "label": "Tool use" } ] },
+      { "label": "Action", "accent": "mint", "children": [ { "label": "API calls" }, { "label": "Code exec" } ] }
+    ]
+  },
+  "metrics": [
+    { "label": "Layers", "value": "3", "accent": "cyan" },
+    { "label": "Components", "value": "8", "accent": "violet" },
+    { "label": "Shared across", "value": "all agents", "accent": "mint" },
+    { "label": "Swappable", "value": "per layer", "accent": "amber" }
+  ],
+  "takeaway": "Fix the layer, not the agent: when every agent shares the same three-layer map, an upgrade to one component lifts the whole fleet.",
+  "signal": "architecture note"
+}

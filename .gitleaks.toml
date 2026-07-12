@@ -1,0 +1,15 @@
+# Epic 00 / Sprint 0.3 — secret scanning (CI gate). Extends gitleaks' default rules.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Non-secret fixtures and examples"
+paths = [
+  '''\.env\.example$''',
+  '''planning/fixtures/redteam/.*''',   # red-team prompts contain fake key-shaped strings on purpose
+  '''server/.*\.smoke\.mjs$''',         # tests use obvious dummy keys (sk-dummy-…)
+]
+regexes = [
+  '''sk-dummy-[A-Za-z0-9-]+''',
+  '''sk-(test|invalid)-[A-Za-z0-9-]+''',
+]

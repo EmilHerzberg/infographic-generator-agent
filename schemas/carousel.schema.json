@@ -1,0 +1,93 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "carousel.schema.json",
+  "title": "Carousel",
+  "description": "Multi-slide LinkedIn carousel. Each slide follows the infographic spec; the carousel adds sequencing and a shared content type.",
+  "type": "object",
+  "required": [
+    "id",
+    "designSystemVersion",
+    "visualArsenalVersion",
+    "layoutCollisionProtectionVersion",
+    "creatorIdentityMarkVersion",
+    "colorStrategyVersion",
+    "contentType",
+    "slides",
+    "qualityChecklist"
+  ],
+  "properties": {
+    "id": { "type": "string" },
+    "designSystemVersion": {
+      "enum": ["v2-warm-technical-editorial"],
+      "default": "v2-warm-technical-editorial"
+    },
+    "visualArsenalVersion": {
+      "enum": ["v1-content-type-based-visual-formats"],
+      "default": "v1-content-type-based-visual-formats"
+    },
+    "layoutCollisionProtectionVersion": {
+      "enum": ["v1-no-overlap-system"],
+      "default": "v1-no-overlap-system"
+    },
+    "creatorIdentityMarkVersion": {
+      "enum": ["v1-animated-signature-system"],
+      "default": "v1-animated-signature-system"
+    },
+    "colorStrategyVersion": {
+      "enum": ["v1-multi-accent-semantic-color-system"],
+      "default": "v1-multi-accent-semantic-color-system"
+    },
+    "title": { "type": "string", "maxLength": 80 },
+    "topic": { "type": "string", "maxLength": 120 },
+    "contentType": { "$ref": "infographic.schema.json#/$defs/contentType" },
+    "primaryVisualFormat": {
+      "type": "string",
+      "description": "The dominant visual structure shared across the carousel (slides may use complementary supporting formats)."
+    },
+    "formatSelectionReason": {
+      "type": "string",
+      "minLength": 20
+    },
+    "antiRepetitionNote": { "type": "string" },
+    "recentFormatAvoidance": { "type": "string" },
+    "visualDiversityTags": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "non_chart",
+          "workflow",
+          "architecture",
+          "matrix",
+          "stack",
+          "loop",
+          "comparison",
+          "diagnostic",
+          "timeline",
+          "control_system",
+          "agentic",
+          "data_flow",
+          "conceptual",
+          "chart"
+        ]
+      },
+      "minItems": 1
+    },
+    "storyArc": {
+      "type": "string",
+      "description": "One sentence: where the reader starts and where they end up."
+    },
+    "slides": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 10,
+      "items": { "$ref": "infographic.schema.json" }
+    },
+    "accentStrategy": {
+      "type": "object",
+      "properties": {
+        "dominantAccent": { "enum": ["cyan", "amber", "violet", "mint", "burnt"] }
+      }
+    },
+    "qualityChecklist": { "$ref": "infographic.schema.json#/$defs/qualityChecklist" }
+  }
+}

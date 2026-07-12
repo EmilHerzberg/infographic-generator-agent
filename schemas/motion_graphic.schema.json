@@ -1,0 +1,568 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "motion_graphic.schema.json",
+  "title": "MotionGraphic",
+  "description": "Remotion composition spec for a single LinkedIn motion graphic (≤20s). Content type + visual format must be classified BEFORE beat map.",
+  "type": "object",
+  "required": [
+    "id",
+    "designSystemVersion",
+    "motionSystemVersion",
+    "motionTimingSystemVersion",
+    "visualArsenalVersion",
+    "layoutCollisionProtectionVersion",
+    "creatorIdentityMarkVersion",
+    "colorStrategyVersion",
+    "format",
+    "canvas",
+    "safeMargins",
+    "layoutZones",
+    "boundingBoxes",
+    "motionPaths",
+    "collisionCheck",
+    "finalFrameCheck",
+    "creatorSignature",
+    "colorRolePlan",
+    "durationSec",
+    "fps",
+    "contentType",
+    "primaryVisualFormat",
+    "formatSelectionReason",
+    "headline",
+    "animationNarrative",
+    "mainMotionEvent",
+    "readingSequence",
+    "headlineEntranceStyle",
+    "beatMap",
+    "eyePath",
+    "easingPlan",
+    "finalFrameTest",
+    "qualityChecklist"
+  ],
+  "properties": {
+    "id": { "type": "string" },
+    "designSystemVersion": {
+      "enum": ["v2-warm-technical-editorial"],
+      "default": "v2-warm-technical-editorial"
+    },
+    "motionSystemVersion": {
+      "enum": ["v2-directed-system-motion"],
+      "default": "v2-directed-system-motion"
+    },
+    "motionTimingSystemVersion": {
+      "enum": ["v2-attention-choreography"],
+      "default": "v2-attention-choreography"
+    },
+    "visualArsenalVersion": {
+      "enum": ["v1-content-type-based-visual-formats"],
+      "default": "v1-content-type-based-visual-formats"
+    },
+    "layoutCollisionProtectionVersion": {
+      "enum": ["v1-no-overlap-system"],
+      "default": "v1-no-overlap-system"
+    },
+    "creatorIdentityMarkVersion": {
+      "enum": ["v1-animated-signature-system"],
+      "default": "v1-animated-signature-system"
+    },
+    "creatorSignature": { "$ref": "infographic.schema.json#/$defs/creatorSignature" },
+    "colorStrategyVersion": {
+      "enum": ["v1-multi-accent-semantic-color-system"],
+      "default": "v1-multi-accent-semantic-color-system"
+    },
+    "colorRolePlan": { "$ref": "infographic.schema.json#/$defs/colorRolePlan" },
+    "accentUsage": { "$ref": "infographic.schema.json#/$defs/accentUsage" },
+    "colorSequencing": {
+      "type": "array",
+      "description": "Time-ordered plan of which accents activate when. Default: cyan introduces system → amber highlights insight → violet/mint differentiates layer/outcome.",
+      "items": {
+        "type": "object",
+        "required": ["atSec", "accent", "purpose"],
+        "properties": {
+          "atSec": { "type": "number" },
+          "accent": {
+            "enum": ["systemCyan", "insightAmber", "strategicViolet", "successMint", "frictionOrange"]
+          },
+          "purpose": {
+            "enum": [
+              "introduce-system",
+              "highlight-insight",
+              "mark-decision",
+              "mark-friction",
+              "reveal-reasoning-layer",
+              "mark-completion",
+              "differentiate-alternative"
+            ]
+          }
+        }
+      }
+    },
+    "readingSequence": {
+      "type": "array",
+      "minItems": 3,
+      "description": "The order in which the viewer should understand elements. Declared BEFORE animation code. Maps conceptual flow → reveal order. The creator signature is continuous and not an entry here.",
+      "items": {
+        "type": "object",
+        "required": ["order", "element", "entranceStyle"],
+        "properties": {
+          "order": { "type": "integer", "minimum": 1 },
+          "element": {
+            "type": "string",
+            "description": "e.g. 'headline' · 'system-context' · 'mechanism' · 'metric' · 'final-takeaway' · or a specific component id."
+          },
+          "role": {
+            "enum": [
+              "headline",
+              "system-context",
+              "mechanism",
+              "metric-insight",
+              "final-takeaway",
+              "supporting"
+            ]
+          },
+          "entranceStyle": {
+            "enum": [
+              "fade-y",
+              "word-by-word",
+              "typing-terminal",
+              "fade-only",
+              "scale-in-glow",
+              "draw-line",
+              "signal-travel",
+              "grow",
+              "count-up",
+              "count-down"
+            ]
+          },
+          "readableBySec": {
+            "type": "number",
+            "description": "By when the element is fully readable (not mid-transition). Headline must be ≤1.0s."
+          },
+          "settledBySec": {
+            "type": "number",
+            "description": "By when the element is at its final state and no longer animating."
+          },
+          "staysVisible": { "type": "boolean", "default": true },
+          "conceptualReason": {
+            "type": "string",
+            "description": "Why this element appears at this position in the order (e.g., 'the problem must be understood before the system is introduced')."
+          }
+        }
+      }
+    },
+    "headlineEntranceStyle": {
+      "enum": ["fade-y", "word-by-word", "typing-terminal", "fade-only"],
+      "default": "fade-y",
+      "description": "typing-terminal allowed only for debugging / system-init / agent-execution / command-line / technical build-story concepts. Never the default. Never used twice in a row across recent videos."
+    },
+    "typingEntranceJustification": {
+      "type": "string",
+      "description": "Required only when headlineEntranceStyle = typing-terminal. One sentence: why typing fits this concept."
+    },
+    "format": { "enum": ["portrait", "square", "landscape"], "default": "portrait" },
+    "canvas": { "$ref": "infographic.schema.json#/$defs/canvas" },
+    "safeMargins": { "$ref": "infographic.schema.json#/$defs/safeMargins" },
+    "layoutZones": {
+      "type": "array",
+      "items": { "$ref": "infographic.schema.json#/$defs/layoutZone" },
+      "minItems": 1
+    },
+    "boundingBoxes": {
+      "type": "array",
+      "items": { "$ref": "infographic.schema.json#/$defs/boundingBox" },
+      "minItems": 1
+    },
+    "motionPaths": {
+      "type": "array",
+      "items": { "$ref": "infographic.schema.json#/$defs/motionPath" }
+    },
+    "collisionCheck": { "$ref": "infographic.schema.json#/$defs/collisionCheck" },
+    "autoSimplification": { "$ref": "infographic.schema.json#/$defs/autoSimplification" },
+    "finalFrameCheck": { "$ref": "infographic.schema.json#/$defs/finalFrameCheck" },
+    "durationSec": { "type": "number", "minimum": 6, "maximum": 20 },
+    "fps": { "type": "integer", "enum": [24, 30, 60], "default": 30 },
+    "contentType": { "$ref": "infographic.schema.json#/$defs/contentType" },
+    "primaryVisualFormat": {
+      "type": "string",
+      "minLength": 3,
+      "description": "Dominant visual structure (e.g. 'Swimlane Workflow', 'Agent Loop'). See memory/visual_content_arsenal_v1.md."
+    },
+    "secondarySupportingElement": { "type": "string" },
+    "formatSelectionReason": {
+      "type": "string",
+      "minLength": 20,
+      "description": "One sentence: why this format fits, and why it's not just another line chart."
+    },
+    "antiRepetitionNote": { "type": "string" },
+    "chartJustification": {
+      "type": "string",
+      "description": "Required ONLY when the primary format is a chart. Charts allowed only for change-over-time / trend / signal emergence / before-after metric movement."
+    },
+    "visualDiversityTags": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "non_chart",
+          "workflow",
+          "architecture",
+          "matrix",
+          "stack",
+          "loop",
+          "comparison",
+          "diagnostic",
+          "timeline",
+          "control_system",
+          "agentic",
+          "data_flow",
+          "conceptual",
+          "chart"
+        ]
+      },
+      "minItems": 1
+    },
+    "recentFormatAvoidance": { "type": "string" },
+    "headline": { "type": "string", "maxLength": 120 },
+    "eyebrow": { "type": "string", "maxLength": 40 },
+    "takeaway": { "type": "string", "maxLength": 140 },
+    "visualMood": {
+      "type": "array",
+      "items": { "enum": ["technical", "warm", "editorial", "strategic", "system-like"] },
+      "minItems": 1
+    },
+    "accentStrategy": {
+      "type": "object",
+      "required": ["dominantAccent"],
+      "properties": {
+        "dominantAccent": { "enum": ["cyan", "amber", "violet", "mint", "burnt"] },
+        "supportingAccent": { "enum": ["cyan", "amber", "violet", "mint", "burnt", null] },
+        "stateAccent": { "enum": ["cyan", "amber", "violet", "mint", "burnt", null] }
+      }
+    },
+    "animationNarrative": {
+      "type": "object",
+      "required": ["purpose", "storyPattern"],
+      "properties": {
+        "purpose": { "type": "string", "minLength": 20 },
+        "storyPattern": {
+          "enum": [
+            "problem-system-result",
+            "input-agent-decision-action",
+            "before-bottleneck-after",
+            "signal-vs-noise",
+            "layers-of-leverage",
+            "custom"
+          ]
+        },
+        "keyMotionMoments": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["atSec", "label"],
+            "properties": {
+              "atSec": { "type": "number" },
+              "label": { "type": "string" },
+              "intent": { "enum": ["reveal", "sequence", "causality", "comparison", "emphasis", "transformation", "escalation", "resolution"] }
+            }
+          }
+        }
+      }
+    },
+    "mainMotionEvent": {
+      "type": "object",
+      "required": ["type", "description"],
+      "properties": {
+        "type": {
+          "enum": [
+            "chart-grows-reveals-signal",
+            "workflow-activates-input-to-output",
+            "messy-collapses-to-clean-system",
+            "bottleneck-highlighted-and-resolved",
+            "layers-stack-into-operating-model",
+            "noise-filters-into-insight",
+            "agent-routes-input-to-action",
+            "custom"
+          ]
+        },
+        "description": { "type": "string", "minLength": 20 },
+        "supportingAnimations": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "beatMap": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 5,
+      "items": {
+        "type": "object",
+        "required": [
+          "beatNumber",
+          "beatName",
+          "timestampStart",
+          "timestampEnd",
+          "visualState",
+          "primaryFocus",
+          "animationPurpose",
+          "animatedElements",
+          "easing",
+          "holdTime",
+          "mobileReadabilityNote",
+          "finalFrameContribution",
+          "collisionRisk",
+          "overlapMitigation"
+        ],
+        "properties": {
+          "beatNumber": { "type": "integer", "minimum": 1, "maximum": 5 },
+          "beatName": {
+            "enum": [
+              "Hook",
+              "Orientation",
+              "Mechanism",
+              "Insight",
+              "Memory Anchor",
+              "Hook / Problem",
+              "Mechanism / Transformation",
+              "Takeaway / Memory Anchor"
+            ]
+          },
+          "timestampStart": { "type": "number", "minimum": 0 },
+          "timestampEnd": { "type": "number", "minimum": 0 },
+          "visualState": { "type": "string" },
+          "primaryFocus": { "type": "string" },
+          "animationPurpose": {
+            "enum": ["reveal", "sequence", "causality", "comparison", "emphasis", "transformation", "escalation", "resolution"]
+          },
+          "animatedElements": { "type": "array", "items": { "type": "string" } },
+          "easing": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["element", "easing"],
+              "properties": {
+                "element": { "type": "string" },
+                "easing": {
+                  "enum": [
+                    "easeOutCubic",
+                    "easeOutQuart",
+                    "easeInOutCubic",
+                    "easeInOutSine",
+                    "easeOutExpo",
+                    "easeOutBackSubtle",
+                    "easeInCubic",
+                    "easeInQuad"
+                  ]
+                },
+                "durationMs": { "type": "number", "minimum": 100, "maximum": 8000 }
+              }
+            }
+          },
+          "holdTime": {
+            "type": "object",
+            "properties": {
+              "ms": { "type": "number" },
+              "description": { "type": "string" }
+            }
+          },
+          "mobileReadabilityNote": { "type": "string" },
+          "finalFrameContribution": { "type": "string" },
+          "visibleElements": { "type": "array", "items": { "type": "string" } },
+          "hiddenElements": { "type": "array", "items": { "type": "string" } },
+          "collisionRisk": { "enum": ["none", "low", "medium", "high"] },
+          "overlapMitigation": {
+            "type": "string",
+            "description": "What's done to prevent collision during this beat (reroute / delay / mask / fade text / clip / none-required)."
+          }
+        }
+      }
+    },
+    "eyePath": {
+      "type": "object",
+      "required": ["description", "focusSequence"],
+      "properties": {
+        "description": { "type": "string" },
+        "focusSequence": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["atSec", "focusElement"],
+            "properties": {
+              "atSec": { "type": "number" },
+              "focusElement": { "type": "string" },
+              "staysStill": { "type": "array", "items": { "type": "string" } }
+            }
+          }
+        },
+        "competingMotionAvoided": { "type": "boolean" }
+      }
+    },
+    "focusLockMoment": {
+      "type": "object",
+      "required": ["timestampStart", "timestampEnd", "focusElement", "purpose"],
+      "properties": {
+        "timestampStart": { "type": "number" },
+        "timestampEnd": { "type": "number" },
+        "focusElement": { "type": "string" },
+        "dimmedElements": { "type": "array", "items": { "type": "string" } },
+        "purpose": {
+          "enum": [
+            "bottleneck-reveal",
+            "key-metric",
+            "final-insight",
+            "model-decision-point",
+            "before-after-contrast",
+            "chart-inflection-point",
+            "custom"
+          ]
+        }
+      }
+    },
+    "staggerPlan": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["group", "delayMs"],
+        "properties": {
+          "group": { "type": "string" },
+          "delayMs": { "type": "number", "minimum": 50, "maximum": 700 },
+          "maxElements": { "type": "integer", "maximum": 7, "default": 7 },
+          "clusterStrategy": { "type": "string" }
+        }
+      }
+    },
+    "pausePlan": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["moment", "durationMs", "purpose"],
+        "properties": {
+          "moment": {
+            "enum": [
+              "after-headline",
+              "after-problem-state",
+              "after-bottleneck",
+              "before-final-takeaway",
+              "final-hold",
+              "custom"
+            ]
+          },
+          "durationMs": { "type": "number" },
+          "purpose": { "type": "string" }
+        }
+      }
+    },
+    "densityCurve": {
+      "type": "object",
+      "required": ["early", "middle", "insight", "final"],
+      "properties": {
+        "early": { "enum": ["low", "low-medium", "medium"], "default": "low-medium" },
+        "middle": { "enum": ["medium", "medium-high", "high"], "default": "medium-high" },
+        "insight": { "enum": ["medium-high", "high"], "default": "high" },
+        "final": { "enum": ["low", "low-medium", "medium"], "default": "low-medium" }
+      }
+    },
+    "loopPlan": {
+      "type": "object",
+      "required": ["finalState", "avoidsAbruptEnding"],
+      "properties": {
+        "finalState": {
+          "enum": [
+            "final-dashboard-holds",
+            "ambient-motion-continues",
+            "signal-pulse-fades",
+            "chart-remains",
+            "insight-card-holds",
+            "custom"
+          ]
+        },
+        "loopBehavior": { "enum": ["clean-loop", "graceful-stop", "ambient-continue"] },
+        "avoidsAbruptEnding": { "type": "boolean" }
+      }
+    },
+    "easingPlan": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["element", "easing", "reason"],
+        "properties": {
+          "element": { "type": "string" },
+          "easing": {
+            "enum": [
+              "easeOutCubic",
+              "easeOutQuart",
+              "easeInOutCubic",
+              "easeInOutSine",
+              "easeOutExpo",
+              "easeOutBackSubtle",
+              "easeInCubic",
+              "easeInQuad"
+            ]
+          },
+          "reason": { "type": "string" }
+        }
+      }
+    },
+    "effectsPlan": {
+      "type": "object",
+      "properties": {
+        "glow": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "target": { "type": "string" },
+              "color": { "enum": ["cyan", "amber", "mint", "orange"] }
+            }
+          }
+        },
+        "blur": { "type": "array", "items": { "type": "string" } },
+        "pulse": { "type": "array", "items": { "type": "string" } },
+        "scanLine": { "type": "array", "items": { "type": "string" } },
+        "particles": { "type": "array", "items": { "type": "string" } },
+        "glitch": { "type": "array", "items": { "type": "string" }, "maxItems": 2 },
+        "noiseTexture": { "type": "number", "minimum": 0, "maximum": 0.05 }
+      }
+    },
+    "symbolicLayer": {
+      "type": "object",
+      "properties": {
+        "iconStyle": { "enum": ["lucide", "emoji", "none"] },
+        "lucideIcons": { "type": "array", "items": { "type": "string" }, "maxItems": 6 },
+        "allowedEmojis": { "type": "array", "items": { "type": "string" }, "maxItems": 3 }
+      }
+    },
+    "camera": {
+      "type": "object",
+      "properties": {
+        "zoom": {
+          "type": "object",
+          "properties": {
+            "from": { "type": "number", "minimum": 0.95, "maximum": 1.1 },
+            "to": { "type": "number", "minimum": 0.95, "maximum": 1.1 }
+          }
+        },
+        "panPx": { "type": "number", "minimum": -40, "maximum": 40 }
+      }
+    },
+    "finalFrameTest": {
+      "type": "object",
+      "required": [
+        "topicVisible",
+        "takeawayVisible",
+        "brandStyleVisible",
+        "mobileReadable",
+        "notMidTransition",
+        "thumbnailSuitable",
+        "noOverlap"
+      ],
+      "properties": {
+        "topicVisible": { "type": "boolean" },
+        "takeawayVisible": { "type": "boolean" },
+        "brandStyleVisible": { "type": "boolean" },
+        "mobileReadable": { "type": "boolean" },
+        "notMidTransition": { "type": "boolean" },
+        "thumbnailSuitable": { "type": "boolean" },
+        "insideSafeMargins": { "type": "boolean" },
+        "noOverlap": { "type": "boolean" }
+      }
+    },
+    "qualityChecklist": { "$ref": "infographic.schema.json#/$defs/qualityChecklist" }
+  }
+}

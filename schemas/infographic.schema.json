@@ -1,0 +1,618 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "infographic.schema.json",
+  "title": "Infographic",
+  "description": "Single-still LinkedIn infographic (1080x1350 portrait default). Content type, visual format, AND layout safety map must be declared before design.",
+  "type": "object",
+  "required": [
+    "id",
+    "designSystemVersion",
+    "visualArsenalVersion",
+    "layoutCollisionProtectionVersion",
+    "creatorIdentityMarkVersion",
+    "colorStrategyVersion",
+    "format",
+    "canvas",
+    "safeMargins",
+    "layoutZones",
+    "boundingBoxes",
+    "collisionCheck",
+    "finalFrameCheck",
+    "creatorSignature",
+    "colorRolePlan",
+    "contentType",
+    "primaryVisualFormat",
+    "formatSelectionReason",
+    "headline",
+    "visualization",
+    "qualityChecklist"
+  ],
+  "properties": {
+    "id": { "type": "string" },
+    "designSystemVersion": {
+      "type": "string",
+      "enum": ["v2-warm-technical-editorial"],
+      "default": "v2-warm-technical-editorial"
+    },
+    "visualArsenalVersion": {
+      "type": "string",
+      "enum": ["v1-content-type-based-visual-formats"],
+      "default": "v1-content-type-based-visual-formats"
+    },
+    "layoutCollisionProtectionVersion": {
+      "type": "string",
+      "enum": ["v1-no-overlap-system"],
+      "default": "v1-no-overlap-system"
+    },
+    "creatorIdentityMarkVersion": {
+      "type": "string",
+      "enum": ["v1-animated-signature-system"],
+      "default": "v1-animated-signature-system"
+    },
+    "creatorSignature": { "$ref": "#/$defs/creatorSignature" },
+    "colorStrategyVersion": {
+      "type": "string",
+      "enum": ["v1-multi-accent-semantic-color-system"],
+      "default": "v1-multi-accent-semantic-color-system"
+    },
+    "colorRolePlan": { "$ref": "#/$defs/colorRolePlan" },
+    "accentUsage": { "$ref": "#/$defs/accentUsage" },
+    "format": {
+      "type": "string",
+      "enum": ["portrait", "square", "landscape"],
+      "default": "portrait"
+    },
+    "canvas": { "$ref": "#/$defs/canvas" },
+    "safeMargins": { "$ref": "#/$defs/safeMargins" },
+    "layoutZones": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/layoutZone" },
+      "minItems": 1
+    },
+    "boundingBoxes": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/boundingBox" },
+      "minItems": 1
+    },
+    "collisionCheck": { "$ref": "#/$defs/collisionCheck" },
+    "autoSimplification": { "$ref": "#/$defs/autoSimplification" },
+    "finalFrameCheck": { "$ref": "#/$defs/finalFrameCheck" },
+    "contentType": { "$ref": "#/$defs/contentType" },
+    "primaryVisualFormat": {
+      "type": "string",
+      "minLength": 3,
+      "description": "Dominant visual structure. See memory/visual_content_arsenal_v1.md."
+    },
+    "secondarySupportingElement": { "type": "string" },
+    "formatSelectionReason": { "type": "string", "minLength": 20 },
+    "antiRepetitionNote": { "type": "string" },
+    "chartJustification": { "type": "string" },
+    "visualDiversityTags": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "non_chart",
+          "workflow",
+          "architecture",
+          "matrix",
+          "stack",
+          "loop",
+          "comparison",
+          "diagnostic",
+          "timeline",
+          "control_system",
+          "agentic",
+          "data_flow",
+          "conceptual",
+          "chart"
+        ]
+      },
+      "minItems": 1
+    },
+    "recentFormatAvoidance": { "type": "string" },
+    "visualMood": {
+      "type": "array",
+      "items": {
+        "enum": ["technical", "warm", "editorial", "strategic", "system-like"]
+      },
+      "minItems": 1
+    },
+    "eyebrow": { "type": "string", "maxLength": 40 },
+    "headline": { "type": "string", "maxLength": 120 },
+    "visualization": {
+      "type": "object",
+      "required": ["kind"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "diagram",
+            "flowchart",
+            "node-graph",
+            "chart",
+            "timeline",
+            "terminal",
+            "heatmap",
+            "pipeline",
+            "table",
+            "matrix",
+            "stack",
+            "loop",
+            "swimlane",
+            "hub-spoke",
+            "tree",
+            "radar",
+            "metaphor"
+          ]
+        },
+        "data": {}
+      }
+    },
+    "metrics": {
+      "type": "array",
+      "maxItems": 4,
+      "items": {
+        "type": "object",
+        "required": ["label", "value"],
+        "properties": {
+          "label": { "type": "string", "maxLength": 24 },
+          "value": { "type": "string", "maxLength": 16 },
+          "delta": { "type": "string", "maxLength": 20 },
+          "accent": {
+            "type": "string",
+            "enum": ["cyan", "amber", "violet", "mint", "burnt"]
+          }
+        }
+      }
+    },
+    "signal": { "type": "string", "maxLength": 40 },
+    "takeaway": { "type": "string", "maxLength": 140 },
+    "accentStrategy": {
+      "type": "object",
+      "required": ["dominantAccent"],
+      "properties": {
+        "dominantAccent": { "enum": ["cyan", "amber", "violet", "mint", "burnt"] },
+        "supportingAccent": { "enum": ["cyan", "amber", "violet", "mint", "burnt", null] },
+        "stateAccent": { "enum": ["cyan", "amber", "violet", "mint", "burnt", null] }
+      }
+    },
+    "symbolicLayer": {
+      "type": "object",
+      "properties": {
+        "iconStyle": { "enum": ["lucide", "emoji", "none"] },
+        "lucideIcons": { "type": "array", "items": { "type": "string" }, "maxItems": 6 },
+        "allowedEmojis": { "type": "array", "items": { "type": "string" }, "maxItems": 3 }
+      }
+    },
+    "qualityChecklist": { "$ref": "#/$defs/qualityChecklist" }
+  },
+  "$defs": {
+    "canvas": {
+      "type": "object",
+      "required": ["width", "height", "format"],
+      "properties": {
+        "width": { "type": "integer", "minimum": 320 },
+        "height": { "type": "integer", "minimum": 320 },
+        "format": { "type": "string", "enum": ["portrait", "square", "landscape"] }
+      }
+    },
+    "safeMargins": {
+      "type": "object",
+      "required": ["top", "right", "bottom", "left"],
+      "description": "Source pixels. Minimum 64 on every side for 1080×1350. Preferred 72–96.",
+      "properties": {
+        "top": { "type": "integer", "minimum": 64 },
+        "right": { "type": "integer", "minimum": 64 },
+        "bottom": { "type": "integer", "minimum": 64 },
+        "left": { "type": "integer", "minimum": 64 },
+        "bottomReserve": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 80,
+          "description": "Bottom reserve where LinkedIn platform UI competes. No essential content here."
+        }
+      }
+    },
+    "layoutZone": {
+      "type": "object",
+      "required": ["name", "x", "y", "width", "height", "purpose"],
+      "properties": {
+        "name": { "type": "string" },
+        "x": { "type": "integer" },
+        "y": { "type": "integer" },
+        "width": { "type": "integer" },
+        "height": { "type": "integer" },
+        "purpose": { "type": "string" }
+      }
+    },
+    "boundingBox": {
+      "type": "object",
+      "required": ["id", "elementType", "x", "y", "width", "height", "priority"],
+      "properties": {
+        "id": { "type": "string" },
+        "elementType": {
+          "enum": [
+            "headline",
+            "eyebrow",
+            "subtitle",
+            "visualization",
+            "metricCard",
+            "annotation",
+            "signal",
+            "signature",
+            "callout",
+            "icon",
+            "decoration"
+          ]
+        },
+        "x": { "type": "integer" },
+        "y": { "type": "integer" },
+        "width": { "type": "integer" },
+        "height": { "type": "integer" },
+        "priority": { "enum": ["P1", "P2", "P3", "P4"] },
+        "textSize": {
+          "type": "integer",
+          "description": "Source-pixel size. Must clear the mobile floor for the element role."
+        },
+        "maxLines": { "type": "integer", "minimum": 1, "maximum": 4 },
+        "collisionRisk": { "enum": ["none", "low", "medium", "high"] }
+      }
+    },
+    "motionPath": {
+      "type": "object",
+      "required": ["id", "element", "from", "to", "crossesTextZone"],
+      "properties": {
+        "id": { "type": "string" },
+        "element": { "type": "string" },
+        "from": {
+          "type": "object",
+          "required": ["x", "y"],
+          "properties": { "x": { "type": "integer" }, "y": { "type": "integer" } }
+        },
+        "to": {
+          "type": "object",
+          "required": ["x", "y"],
+          "properties": { "x": { "type": "integer" }, "y": { "type": "integer" } }
+        },
+        "crossesTextZone": { "type": "boolean" },
+        "mitigation": {
+          "type": "string",
+          "description": "If crossesTextZone is true, how it's resolved (reroute / delay / fade text temporarily / mask / clip / move text)."
+        }
+      }
+    },
+    "collisionCheck": {
+      "type": "object",
+      "required": ["safeToRender"],
+      "properties": {
+        "staticOverlapRisk": { "enum": ["none", "low", "medium", "high"] },
+        "animatedOverlapRisk": { "enum": ["none", "low", "medium", "high"] },
+        "finalFrameOverlapRisk": { "enum": ["none", "low", "medium", "high"] },
+        "mobileReadabilityRisk": { "enum": ["none", "low", "medium", "high"] },
+        "mitigationPlan": { "type": "string" },
+        "safeToRender": {
+          "type": "boolean",
+          "description": "False blocks rendering — revise the layout first."
+        }
+      }
+    },
+    "autoSimplification": {
+      "type": "object",
+      "properties": {
+        "needed": { "type": "boolean" },
+        "actionsApplied": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "shortened-text",
+              "removed-non-essential-labels",
+              "clustered-nodes",
+              "replaced-labels-with-icons",
+              "split-into-phases",
+              "moved-detail-to-caption",
+              "converted-to-carousel",
+              "reduced-visual-complexity"
+            ]
+          }
+        },
+        "removedElements": { "type": "array", "items": { "type": "string" } },
+        "shortenedText": { "type": "array", "items": { "type": "string" } },
+        "splitIntoPhases": { "type": "boolean" }
+      }
+    },
+    "finalFrameCheck": {
+      "type": "object",
+      "required": [
+        "noOverlap",
+        "readableOnMobile",
+        "insideSafeMargins",
+        "notMidTransition",
+        "takeawayVisible"
+      ],
+      "properties": {
+        "noOverlap": { "type": "boolean" },
+        "readableOnMobile": { "type": "boolean" },
+        "insideSafeMargins": { "type": "boolean" },
+        "notMidTransition": { "type": "boolean" },
+        "takeawayVisible": { "type": "boolean" },
+        "thumbnailSuitable": { "type": "boolean" }
+      }
+    },
+    "creatorSignature": {
+      "type": "object",
+      "required": [
+        "enabled",
+        "variant",
+        "placement",
+        "content",
+        "boundingBox",
+        "collisionCheck"
+      ],
+      "description": "Mandatory creator identity mark. Never disabled in production output.",
+      "properties": {
+        "enabled": { "type": "boolean", "const": true },
+        "variant": { "enum": ["compact", "minimal", "final", "service"] },
+        "placement": { "enum": ["bottomRight", "bottomLeft"] },
+        "showEmail": { "type": "boolean", "default": false },
+        "showServiceLabel": { "type": "boolean", "default": false },
+        "content": {
+          "type": "object",
+          "required": ["name", "subtitle"],
+          "properties": {
+            "name": { "type": "string", "default": "Emil Herzberg" },
+            "subtitle": {
+              "type": "string",
+              "default": "AI Systems · Automation · Design"
+            },
+            "email": { "type": "string", "format": "email" },
+            "monogram": { "type": "string", "default": "EH", "maxLength": 3 }
+          }
+        },
+        "animation": {
+          "type": "object",
+          "properties": {
+            "entranceTiming": {
+              "type": "object",
+              "properties": {
+                "startSec": { "type": "number", "default": 0.6 },
+                "endSec": { "type": "number", "default": 1.2 }
+              }
+            },
+            "idleMotion": {
+              "enum": ["none", "slow-pulse", "border-shimmer", "scan-highlight"],
+              "default": "slow-pulse"
+            },
+            "finalFrameEmphasis": { "type": "boolean", "default": true },
+            "easing": {
+              "type": "object",
+              "properties": {
+                "monogram": { "enum": ["easeOutQuart"] },
+                "connector": { "enum": ["easeInOutCubic"] },
+                "text": { "enum": ["easeOutCubic"] }
+              }
+            }
+          }
+        },
+        "style": {
+          "type": "object",
+          "properties": {
+            "panelBackground": {
+              "enum": ["bgWarmGraphite", "bgSoftPanel"],
+              "default": "bgSoftPanel"
+            },
+            "border": { "type": "string", "default": "rgba(244,241,234,0.10)" },
+            "textColor": { "enum": ["textWarmWhite"], "default": "textWarmWhite" },
+            "accentColor": { "enum": ["cyan", "amber"], "default": "cyan" },
+            "opacity": {
+              "type": "number",
+              "minimum": 0.7,
+              "maximum": 1,
+              "default": 0.9
+            }
+          }
+        },
+        "boundingBox": { "$ref": "#/$defs/boundingBox" },
+        "collisionCheck": {
+          "type": "object",
+          "required": [
+            "overlapsContent",
+            "insideSafeMargins",
+            "mobileReadable",
+            "finalFrameVisible",
+            "safeToRender"
+          ],
+          "properties": {
+            "overlapsContent": { "type": "boolean", "const": false },
+            "insideSafeMargins": { "type": "boolean", "const": true },
+            "mobileReadable": { "type": "boolean", "const": true },
+            "finalFrameVisible": { "type": "boolean", "const": true },
+            "safeToRender": { "type": "boolean", "const": true }
+          }
+        }
+      }
+    },
+    "colorRolePlan": {
+      "type": "object",
+      "required": [
+        "primarySystemAccent",
+        "warmContrastAccent",
+        "differentiatorAccent",
+        "primaryMeaning",
+        "warmContrastMeaning",
+        "differentiatorMeaning",
+        "primaryUsage",
+        "warmContrastUsage",
+        "differentiatorUsage",
+        "mobileContrastCheck",
+        "antiMonochromeCheck"
+      ],
+      "description": "Three-role semantic color plan. Required before any visual is generated.",
+      "properties": {
+        "primarySystemAccent": {
+          "enum": ["systemCyan"]
+        },
+        "warmContrastAccent": {
+          "enum": ["insightAmber", "frictionOrange"]
+        },
+        "differentiatorAccent": {
+          "enum": ["strategicViolet", "successMint"]
+        },
+        "primaryMeaning": {
+          "type": "string",
+          "minLength": 10,
+          "description": "What the primary accent represents in THIS specific visual."
+        },
+        "warmContrastMeaning": { "type": "string", "minLength": 10 },
+        "differentiatorMeaning": { "type": "string", "minLength": 10 },
+        "primaryUsage": {
+          "type": "string",
+          "description": "Where the primary accent appears (e.g., 'workflow path nodes 1-7, signal dot')."
+        },
+        "warmContrastUsage": { "type": "string" },
+        "differentiatorUsage": { "type": "string" },
+        "colorDistribution": {
+          "type": "object",
+          "properties": {
+            "neutralPct": { "type": "number", "minimum": 70, "maximum": 80 },
+            "primaryPct": { "type": "number", "minimum": 8, "maximum": 12 },
+            "warmContrastPct": { "type": "number", "minimum": 5, "maximum": 8 },
+            "differentiatorPct": { "type": "number", "minimum": 3, "maximum": 6 }
+          }
+        },
+        "mobileContrastCheck": {
+          "type": "object",
+          "required": ["primary", "warmContrast", "differentiator"],
+          "properties": {
+            "primary": { "type": "boolean" },
+            "warmContrast": { "type": "boolean" },
+            "differentiator": { "type": "boolean" }
+          }
+        },
+        "antiMonochromeCheck": {
+          "type": "boolean",
+          "description": "true = at least 2 of the 3 roles are visibly used with semantic meaning."
+        }
+      }
+    },
+    "accentUsage": {
+      "type": "object",
+      "description": "How each accent is actually used in the visual. Helps the quality check verify the role plan was implemented.",
+      "properties": {
+        "cyanUsage": { "type": "string" },
+        "amberUsage": { "type": "string" },
+        "violetUsage": { "type": "string" },
+        "mintUsage": { "type": "string" },
+        "orangeUsage": { "type": "string" },
+        "dominantAccent": {
+          "enum": ["systemCyan", "insightAmber", "strategicViolet", "successMint", "frictionOrange"]
+        },
+        "supportingAccent": {
+          "enum": ["systemCyan", "insightAmber", "strategicViolet", "successMint", "frictionOrange", null]
+        },
+        "stateAccent": {
+          "enum": ["systemCyan", "insightAmber", "strategicViolet", "successMint", "frictionOrange", null]
+        }
+      }
+    },
+    "contentType": {
+      "type": "string",
+      "enum": [
+        "workflow_process",
+        "architecture_system_design",
+        "before_vs_after",
+        "bottleneck_failure_point",
+        "decision_framework",
+        "myth_vs_reality",
+        "layers_stack",
+        "signal_vs_noise",
+        "business_case_roi_logic",
+        "tool_comparison",
+        "agentic_system",
+        "data_flow",
+        "operating_model",
+        "timeline_evolution",
+        "mental_model",
+        "checklist_audit",
+        "market_trend_insight",
+        "risk_control_system",
+        "case_study_build_story",
+        "conceptual_metaphor"
+      ]
+    },
+    "qualityChecklist": {
+      "type": "object",
+      "description": "All booleans must be true before shipping. See prompts/quality_check.md.",
+      "required": [
+        "readability",
+        "brandFit",
+        "mobileLegibility",
+        "restrainedAccents",
+        "matchesDesignSystemV2",
+        "withinSafeMargins",
+        "contentTypeClassified",
+        "formatFitsContentType",
+        "visualDifferentFromRecent",
+        "chartJustifiedIfUsed",
+        "oneMainVisualIdea",
+        "avoidsCanvaAesthetic",
+        "noTextOverlap",
+        "noLabelsOverVisualsWithoutBacking",
+        "motionPathsRoutedAroundText",
+        "finalFrameCollisionFree",
+        "maxLinesRespected",
+        "complexityReducedNotShrunken",
+        "boundingBoxesDeclared",
+        "layoutSafeToRender",
+        "creatorSignaturePresent",
+        "creatorSignatureFirstSecondVisible",
+        "creatorSignatureFinalFrameVisible",
+        "creatorSignatureNoOverlap",
+        "creatorSignatureMobileReadable",
+        "hasPrimaryAccent",
+        "hasWarmContrast",
+        "hasDifferentiatorAccent",
+        "avoidsMonochrome",
+        "accentsHaveSemanticMeaning",
+        "mobileContrastPass"
+      ],
+      "properties": {
+        "readability": { "type": "boolean" },
+        "brandFit": { "type": "boolean" },
+        "mobileLegibility": { "type": "boolean" },
+        "restrainedAccents": { "type": "boolean" },
+        "matchesDesignSystemV2": { "type": "boolean" },
+        "withinSafeMargins": { "type": "boolean" },
+        "chartSimplifiedForMobile": { "type": "boolean" },
+        "diagramNotShrunkenIntoUnreadability": { "type": "boolean" },
+        "noLowContrastImportantText": { "type": "boolean" },
+        "illustrativeMetricsLabeled": { "type": "boolean" },
+        "contentTypeClassified": { "type": "boolean" },
+        "formatFitsContentType": { "type": "boolean" },
+        "visualDifferentFromRecent": { "type": "boolean" },
+        "chartJustifiedIfUsed": { "type": "boolean" },
+        "oneMainVisualIdea": { "type": "boolean" },
+        "avoidsCanvaAesthetic": { "type": "boolean" },
+        "noTextOverlap": { "type": "boolean" },
+        "noLabelsOverVisualsWithoutBacking": { "type": "boolean" },
+        "motionPathsRoutedAroundText": { "type": "boolean" },
+        "finalFrameCollisionFree": { "type": "boolean" },
+        "maxLinesRespected": { "type": "boolean" },
+        "complexityReducedNotShrunken": { "type": "boolean" },
+        "boundingBoxesDeclared": { "type": "boolean" },
+        "layoutSafeToRender": { "type": "boolean" },
+        "creatorSignaturePresent": { "type": "boolean" },
+        "creatorSignatureFirstSecondVisible": { "type": "boolean" },
+        "creatorSignatureFinalFrameVisible": { "type": "boolean" },
+        "creatorSignatureNoOverlap": { "type": "boolean" },
+        "creatorSignatureMobileReadable": { "type": "boolean" },
+        "hasPrimaryAccent": { "type": "boolean" },
+        "hasWarmContrast": { "type": "boolean" },
+        "hasDifferentiatorAccent": { "type": "boolean" },
+        "avoidsMonochrome": { "type": "boolean" },
+        "accentsHaveSemanticMeaning": { "type": "boolean" },
+        "mobileContrastPass": { "type": "boolean" }
+      }
+    }
+  }
+}

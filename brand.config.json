@@ -1,0 +1,8 @@
+{
+  "$comment": "Brand identity. Replace with your own to re-skin every generated video + the AI briefing. Token names match context/manifest.json placeholders; the on-video signature reads these via src/tokens/design.ts.",
+  "BRAND_NAME": "Your Name",
+  "BRAND_MONOGRAM": "YN",
+  "BRAND_SUBTITLE": "Your tagline · here",
+  "BRAND_SIGNATURE": "YN / YOUR BRAND",
+  "BRAND_EMAIL": "you@example.com"
+}

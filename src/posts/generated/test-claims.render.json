@@ -1,0 +1,19 @@
+{
+  "id": "test-claims",
+  "eyebrow": "ai forecasting / track record",
+  "headline": "A graveyard of confident AI predictions",
+  "visualization": {
+    "kind": "claims",
+    "caption": "confident claims · failed verification",
+    "entries": [
+      { "date": "2016", "source": "Geoffrey Hinton", "claim": "Radiologists will be obsolete in 5 years", "reality": "the field grew" },
+      { "date": "2024", "source": "Dario Amodei", "claim": "90% of code will be AI-written by mid-2025", "reality": "nowhere near" },
+      { "date": "2024", "source": "Elon Musk", "claim": "AI smarter than any human by end of 2025", "reality": "quietly retracted" }
+    ]
+  },
+  "metrics": [
+    { "label": "predictions held", "value": "0 / 3", "delta": "track record", "accent": "burnt" },
+    { "label": "domain experts", "value": "100%", "delta": "lab founders", "accent": "amber" }
+  ],
+  "takeaway": "Track record beats confident forecasts."
+}

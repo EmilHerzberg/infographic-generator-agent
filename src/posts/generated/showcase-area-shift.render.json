@@ -1,0 +1,24 @@
+{
+  "id": "showcase-area-shift",
+  "eyebrow": "AI SYSTEMS · AUTOMATION",
+  "headline": "How the work shifted to autonomous",
+  "visualization": {
+    "kind": "area",
+    "mode": "stacked",
+    "valueLabels": "auto",
+    "unit": "%",
+    "caption": "share of tasks handled, by quarter",
+    "xLabels": ["Q1", "Q2", "Q3", "Q4"],
+    "series": [
+      { "label": "Manual", "values": [70, 52, 34, 19], "accent": "burnt" },
+      { "label": "Assisted", "values": [25, 33, 38, 36], "accent": "amber" },
+      { "label": "Autonomous", "values": [5, 15, 28, 45], "accent": "cyan" }
+    ]
+  },
+  "metrics": [
+    { "label": "Autonomous", "value": "5 → 45%", "accent": "cyan" },
+    { "label": "Manual", "value": "70 → 19%", "accent": "burnt" }
+  ],
+  "takeaway": "In four quarters, autonomous went from a rounding error to nearly half the work.",
+  "signal": "The shift isn't a leap — it compounds quarter over quarter, if you keep shipping."
+}

@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>marketing-content-generation</title>
+    <!-- Brand fonts are loaded OFFLINE (base64 woff2) via src/remotion/fonts-local.css, imported in
+         src/main.tsx — the SAME faces the Remotion MP4 renders with (PL-0.3 render-truth parity).
+         No Google Fonts <link>: it would re-introduce the Preview↔MP4 font-metric gap and a network
+         dependency in headless QA. Regenerate the offline faces with `node tools/fetch-fonts.mjs`. -->
+  </head>
+  <body class="bg-bg-deep-ink text-text-primary antialiased">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

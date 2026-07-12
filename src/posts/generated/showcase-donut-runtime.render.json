@@ -1,0 +1,24 @@
+{
+  "id": "showcase-donut-runtime",
+  "eyebrow": "AI SYSTEMS · PERFORMANCE",
+  "headline": "Where an autonomous run's clock actually goes",
+  "visualization": {
+    "kind": "donut",
+    "centerTotal": "on",
+    "valueLabels": "auto",
+    "centerLabel": "per run",
+    "caption": "wall-clock breakdown",
+    "segments": [
+      { "label": "Model latency", "value": 41, "accent": "cyan" },
+      { "label": "Tool calls", "value": 26, "accent": "violet" },
+      { "label": "Retries", "value": 18, "accent": "burnt" },
+      { "label": "Orchestration", "value": 15, "accent": "amber" }
+    ]
+  },
+  "metrics": [
+    { "label": "Not the model", "value": "59%", "accent": "amber" },
+    { "label": "Pure retries", "value": "18%", "accent": "burnt" }
+  ],
+  "takeaway": "Most of the wait isn't the model thinking — it's everything wired around it.",
+  "signal": "Cut retries and tool round-trips before you reach for a faster model."
+}

@@ -1,0 +1,31 @@
+{
+  "id": "showcase-scatter-autonomy",
+  "eyebrow": "AI SYSTEMS · AGENTS",
+  "headline": "More autonomy, less predictability",
+  "visualization": {
+    "kind": "scatter",
+    "trendLine": "fit",
+    "pointLabels": "auto",
+    "quadrants": "off",
+    "xLabel": "Steps before human review",
+    "yLabel": "Output consistency",
+    "yUnit": "%",
+    "xMin": 0,
+    "xMax": 24,
+    "yMin": 40,
+    "yMax": 100,
+    "points": [
+      { "x": 1, "y": 97, "label": "Copilot", "accent": "cyan" },
+      { "x": 3, "y": 91, "label": "Guided", "accent": "cyan" },
+      { "x": 6, "y": 78, "label": "Supervised", "accent": "amber" },
+      { "x": 12, "y": 61, "label": "Batch", "accent": "amber" },
+      { "x": 20, "y": 44, "label": "Autonomous", "accent": "burnt" }
+    ]
+  },
+  "metrics": [
+    { "label": "Each +5 steps", "value": "−14%", "accent": "burnt" },
+    { "label": "Sweet spot", "value": "3–6 steps", "accent": "mint" }
+  ],
+  "takeaway": "Every step you take a human out of costs consistency. The trade is real — price it.",
+  "signal": "Autonomy is a dial, not a switch. Most production value sits at 3–6 steps."
+}

@@ -1,0 +1,26 @@
+{
+  "id": "funnel-showcase",
+  "eyebrow": "AUTOMATION PIPELINE: WHERE THE WORK LEAKS",
+  "headline": "Twelve thousand tasks enter the pipeline each week; about a quarter ship with no human touch",
+  "visualization": {
+    "kind": "funnel",
+    "caption": "weekly task yield",
+    "dropLabels": "auto",
+    "accent": "cyan",
+    "stages": [
+      { "label": "Tasks queued", "value": 12400, "valueText": "12.4k" },
+      { "label": "Auto-triaged", "value": 9300, "valueText": "9.3k" },
+      { "label": "Agent-handled", "value": 5600, "valueText": "5.6k", "accent": "burnt" },
+      { "label": "Passed QA", "value": 4100, "valueText": "4.1k" },
+      { "label": "Shipped no-touch", "value": 3200, "valueText": "3.2k", "accent": "mint" }
+    ]
+  },
+  "metrics": [
+    { "label": "Tasks / week", "value": "12.4k", "accent": "cyan" },
+    { "label": "Shipped no-touch", "value": "3.2k", "accent": "mint" },
+    { "label": "End-to-end yield", "value": "26%", "accent": "violet" },
+    { "label": "Biggest leak", "value": "−40%", "accent": "burnt" }
+  ],
+  "takeaway": "The largest single drop is the hand-off from triage to the agent — widen that stage and the whole funnel widens with it.",
+  "signal": "ops telemetry"
+}

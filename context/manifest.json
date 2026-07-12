@@ -1,0 +1,34 @@
+{
+  "name": "marketing-content-generation briefing bundle",
+  "description": "Portable design/brand/motion/layout knowledge for generating on-brand LinkedIn/Reddit content. Concatenate the files in `order` (after substituting the placeholders) and inject into any LLM system prompt.",
+  "order": [
+    "00-role-and-output-contract.md",
+    "01-brand-identity.md",
+    "02-design-system.md",
+    "03-color-strategy.md",
+    "04-visual-arsenal.md",
+    "05-layout-safety.md",
+    "06-creator-signature.md",
+    "07-mobile-first.md",
+    "08-motion.md",
+    "09-quality-checklist.md"
+  ],
+  "core": [
+    "00-role-and-output-contract.md",
+    "01-brand-identity.md",
+    "02-design-system.md",
+    "03-color-strategy.md",
+    "04-visual-arsenal.md",
+    "05-layout-safety.md",
+    "06-creator-signature.md",
+    "07-mobile-first.md",
+    "09-quality-checklist.md"
+  ],
+  "placeholders": {
+    "{{BRAND_NAME}}": "display name (e.g. the creator's full name shown on the signature)",
+    "{{BRAND_MONOGRAM}}": "short monogram for the signature node (e.g. initials)",
+    "{{BRAND_SUBTITLE}}": "role tagline shown under the name (e.g. 'AI Systems · Automation · Design')",
+    "{{BRAND_SIGNATURE}}": "short signature mark / handle (e.g. 'NAME / TAGLINE')",
+    "{{BRAND_EMAIL}}": "contact email, hidden by default (service/final-frame only)"
+  }
+}

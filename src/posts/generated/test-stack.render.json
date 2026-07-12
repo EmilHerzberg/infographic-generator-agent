@@ -1,0 +1,20 @@
+{
+  "id": "test-stack",
+  "eyebrow": "where reliability goes",
+  "headline": "Most of the failure budget is coordination",
+  "visualization": {
+    "kind": "stack",
+    "caption": "failure budget composition",
+    "segments": [
+      { "width": 0.5, "color": "burnt", "label": "coordination" },
+      { "width": 0.3, "color": "amber", "label": "flaky tools" },
+      { "width": 0.2, "color": "cyan", "label": "model" }
+    ]
+  },
+  "metrics": [
+    { "label": "coordination", "value": "50%", "accent": "burnt" },
+    { "label": "flaky tools", "value": "30%", "accent": "amber" },
+    { "label": "model", "value": "20%", "accent": "cyan" }
+  ],
+  "takeaway": "Fix the org chart, not the model."
+}

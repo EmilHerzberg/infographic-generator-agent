@@ -1,0 +1,25 @@
+{
+  "id": "distribution-showcase",
+  "eyebrow": "LATENCY SPREAD: NOT EVERY MODEL IS CONSISTENT",
+  "headline": "Two models can share a median yet feel completely different — the spread is what users feel",
+  "visualization": {
+    "kind": "distribution",
+    "caption": "response latency by model (ms, p50 / IQR / range)",
+    "unit": "ms",
+    "showMean": "on",
+    "groupAccents": ["cyan", "amber", "mint"],
+    "groups": [
+      { "label": "Model A", "values": [180, 210, 230, 240, 255, 260, 275, 290, 310, 520] },
+      { "label": "Model B", "values": [120, 200, 260, 300, 340, 380, 430, 500, 560, 640] },
+      { "label": "Model C", "values": [240, 250, 255, 258, 262, 265, 270, 275, 282, 295] }
+    ]
+  },
+  "metrics": [
+    { "label": "Tightest", "value": "Model C", "accent": "mint" },
+    { "label": "Widest IQR", "value": "Model B", "accent": "amber" },
+    { "label": "Shared median", "value": "~260ms", "accent": "cyan" },
+    { "label": "Worst tail", "value": "640ms", "accent": "burnt" }
+  ],
+  "takeaway": "Pick on the spread, not the median: Model C's tight band is predictable; Model B's median hides a tail that doubles the wait.",
+  "signal": "latency benchmark"
+}

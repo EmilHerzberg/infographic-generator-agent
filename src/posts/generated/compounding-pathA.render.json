@@ -1,0 +1,102 @@
+{
+  "id": "compounding-pathA",
+  "eyebrow": "reliability-math",
+  "headline": "Per-step reliability compounds — that's why most agents fail in production",
+  "visualization": {
+    "kind": "chart",
+    "caption": "End-to-end success across N sequential steps (conceptual)",
+    "series": [
+      {
+        "label": "99%/step",
+        "values": [
+          1,
+          0.99,
+          0.98,
+          0.97,
+          0.96,
+          0.95,
+          0.94,
+          0.93,
+          0.92,
+          0.91,
+          0.9
+        ],
+        "color": "mint",
+        "endValueLabel": "~90%"
+      },
+      {
+        "label": "95%/step",
+        "values": [
+          1,
+          0.95,
+          0.9,
+          0.86,
+          0.81,
+          0.77,
+          0.74,
+          0.7,
+          0.66,
+          0.63,
+          0.6
+        ],
+        "color": "cyan",
+        "endValueLabel": "60%"
+      },
+      {
+        "label": "90%/step",
+        "values": [
+          1,
+          0.9,
+          0.81,
+          0.73,
+          0.66,
+          0.59,
+          0.53,
+          0.48,
+          0.43,
+          0.39,
+          0.35
+        ],
+        "color": "burnt",
+        "endValueLabel": "~35%"
+      }
+    ],
+    "xLabels": [
+      "0",
+      "2",
+      "4",
+      "6",
+      "8",
+      "10"
+    ],
+    "yMax": 1
+  },
+  "metrics": [
+    {
+      "label": "95% × 10 steps",
+      "value": "60%",
+      "delta": "0.95¹⁰",
+      "accent": "cyan"
+    },
+    {
+      "label": "90% × 10 steps",
+      "value": "~35%",
+      "delta": "steep collapse",
+      "accent": "burnt"
+    },
+    {
+      "label": "5 agents @ 95%",
+      "value": "77%",
+      "delta": "chain risk",
+      "accent": "amber"
+    },
+    {
+      "label": "GenAI pilots, no P&L",
+      "value": "~95%",
+      "delta": "MIT NANDA Aug'25",
+      "accent": "violet"
+    }
+  ],
+  "takeaway": "Failures multiply. Reliable teams run fewer steps with verification — not bigger models.",
+  "signal": "fewer steps · more verification"
+}

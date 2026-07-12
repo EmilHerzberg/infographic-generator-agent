@@ -1,0 +1,27 @@
+{
+  "id": "showcase-bar-failures",
+  "eyebrow": "AI SYSTEMS · RELIABILITY",
+  "headline": "What actually breaks a production agent",
+  "visualization": {
+    "kind": "bar",
+    "orientation": "horizontal",
+    "mode": "simple",
+    "sort": "desc",
+    "valueLabels": "auto",
+    "unit": "%",
+    "caption": "share of incidents, last 90 days",
+    "categories": [
+      { "label": "Lost handoff state", "value": 34, "accent": "burnt" },
+      { "label": "Silent tool fails", "value": 27, "accent": "burnt" },
+      { "label": "Context overflow", "value": 18, "accent": "amber" },
+      { "label": "Hallucinated args", "value": 13, "accent": "amber" },
+      { "label": "Rate-limit cascade", "value": 8, "accent": "amber" }
+    ]
+  },
+  "metrics": [
+    { "label": "Top cause", "value": "Handoffs", "accent": "burnt" },
+    { "label": "Top two", "value": "61%", "accent": "amber" }
+  ],
+  "takeaway": "Two failure modes cause 61% of incidents — and neither is the model being wrong.",
+  "signal": "Most agent failures are plumbing, not intelligence. Instrument the handoffs first."
+}

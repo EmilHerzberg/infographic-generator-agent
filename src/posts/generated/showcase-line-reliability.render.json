@@ -1,0 +1,26 @@
+{
+  "id": "showcase-line-reliability",
+  "eyebrow": "AI SYSTEMS · RELIABILITY",
+  "headline": "What actually moved our uptime",
+  "visualization": {
+    "kind": "chart",
+    "variant": "line",
+    "markers": "on",
+    "series": [
+      { "label": "uptime", "values": [0.86, 0.88, 0.91, 0.975, 0.985, 0.992], "color": "cyan", "endValueLabel": "99.2%" }
+    ],
+    "xLabels": ["W1", "W2", "W3", "W4", "W5", "W6"],
+    "yMax": 1,
+    "annotations": [
+      { "x": 2, "label": "added retries" },
+      { "x": 3, "label": "fixed handoffs" }
+    ],
+    "caption": "weekly uptime, last six weeks"
+  },
+  "metrics": [
+    { "label": "Now", "value": "99.2%", "accent": "mint" },
+    { "label": "Biggest jump", "value": "W4", "accent": "cyan" }
+  ],
+  "takeaway": "Reliability didn't creep up — it stepped, the week we fixed the handoffs that were dropping state.",
+  "signal": "Plot the interventions, not just the metric. The line tells you what worked."
+}

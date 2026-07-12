@@ -1,0 +1,381 @@
+{
+  "id": "poc-to-production",
+  "designSystemVersion": "v2-warm-technical-editorial",
+  "visualArsenalVersion": "v1-content-type-based-visual-formats",
+  "layoutCollisionProtectionVersion": "v1-no-overlap-system",
+  "creatorIdentityMarkVersion": "v1-animated-signature-system",
+  "creatorSignature": {
+    "enabled": true,
+    "variant": "compact",
+    "placement": "bottomRight",
+    "showEmail": false,
+    "showServiceLabel": false,
+    "content": {
+      "name": "Emil Herzberg",
+      "subtitle": "AI Systems · Automation · Design",
+      "email": "you@example.com",
+      "monogram": "EH"
+    },
+    "animation": {
+      "entranceTiming": {
+        "startSec": 0.6,
+        "endSec": 1.2
+      },
+      "idleMotion": "slow-pulse",
+      "finalFrameEmphasis": true,
+      "easing": {
+        "monogram": "easeOutQuart",
+        "connector": "easeInOutCubic",
+        "text": "easeOutCubic"
+      }
+    },
+    "style": {
+      "panelBackground": "bgSoftPanel",
+      "border": "rgba(244,241,234,0.10)",
+      "textColor": "textWarmWhite",
+      "accentColor": "cyan",
+      "opacity": 0.9
+    },
+    "boundingBox": {
+      "id": "creatorSignature",
+      "elementType": "signature",
+      "x": 880,
+      "y": 1210,
+      "width": 200,
+      "height": 64,
+      "priority": "P2"
+    },
+    "collisionCheck": {
+      "overlapsContent": false,
+      "insideSafeMargins": true,
+      "mobileReadable": true,
+      "finalFrameVisible": true,
+      "safeToRender": true
+    }
+  },
+  "colorStrategyVersion": "v1-multi-accent-semantic-color-system",
+  "colorRolePlan": {
+    "primarySystemAccent": "systemCyan",
+    "warmContrastAccent": "frictionOrange",
+    "differentiatorAccent": "successMint",
+    "primaryMeaning": "Cyan represents the ideal automation path that should flow to production",
+    "warmContrastMeaning": "Orange marks the friction points where POCs stall due to missing production readiness",
+    "differentiatorMeaning": "Mint indicates the critical success factors that differentiate production-reached systems",
+    "primaryUsage": "Workflow path nodes 1-7, signal line connecting nodes",
+    "warmContrastUsage": "Stall points at node 3 (no ownership), node 5 (no monitoring), node 6 (no failure handling)",
+    "differentiatorUsage": "Success factor labels at the bottom: 'Ownership', 'Monitoring', 'Failure Handling'",
+    "colorDistribution": {
+      "neutralPct": 75,
+      "primaryPct": 10,
+      "warmContrastPct": 7,
+      "differentiatorPct": 8
+    },
+    "mobileContrastCheck": {
+      "primary": true,
+      "warmContrast": true,
+      "differentiator": true
+    },
+    "antiMonochromeCheck": true
+  },
+  "accentUsage": {
+    "cyanUsage": "Workflow path nodes and connecting lines",
+    "amberUsage": "Not used",
+    "violetUsage": "Not used",
+    "mintUsage": "Success factor labels and final takeaway highlight",
+    "orangeUsage": "Stall points (friction nodes)",
+    "dominantAccent": "systemCyan",
+    "supportingAccent": "frictionOrange",
+    "stateAccent": "successMint"
+  },
+  "format": "portrait",
+  "canvas": {
+    "width": 1080,
+    "height": 1350,
+    "format": "portrait"
+  },
+  "safeMargins": {
+    "top": 72,
+    "right": 72,
+    "bottom": 72,
+    "left": 72,
+    "bottomReserve": 80
+  },
+  "layoutZones": [
+    {
+      "name": "top",
+      "x": 72,
+      "y": 72,
+      "width": 936,
+      "height": 228,
+      "purpose": "Eyebrow + headline"
+    },
+    {
+      "name": "middle",
+      "x": 72,
+      "y": 320,
+      "width": 936,
+      "height": 710,
+      "purpose": "Main visualization"
+    },
+    {
+      "name": "bottom",
+      "x": 72,
+      "y": 1050,
+      "width": 936,
+      "height": 230,
+      "purpose": "Takeaway + metric strip"
+    }
+  ],
+  "boundingBoxes": [
+    {
+      "id": "eyebrow",
+      "elementType": "eyebrow",
+      "x": 72,
+      "y": 72,
+      "width": 936,
+      "height": 40,
+      "priority": "P1",
+      "textSize": 28,
+      "maxLines": 1,
+      "collisionRisk": "none"
+    },
+    {
+      "id": "headline",
+      "elementType": "headline",
+      "x": 72,
+      "y": 120,
+      "width": 936,
+      "height": 160,
+      "priority": "P1",
+      "textSize": 68,
+      "maxLines": 2,
+      "collisionRisk": "none"
+    },
+    {
+      "id": "workflowPath",
+      "elementType": "visualization",
+      "x": 72,
+      "y": 320,
+      "width": 936,
+      "height": 500,
+      "priority": "P1",
+      "collisionRisk": "none"
+    },
+    {
+      "id": "stallNode3",
+      "elementType": "annotation",
+      "x": 200,
+      "y": 450,
+      "width": 180,
+      "height": 60,
+      "priority": "P2",
+      "textSize": 22,
+      "maxLines": 2,
+      "collisionRisk": "none"
+    },
+    {
+      "id": "stallNode5",
+      "elementType": "annotation",
+      "x": 450,
+      "y": 550,
+      "width": 180,
+      "height": 60,
+      "priority": "P2",
+      "textSize": 22,
+      "maxLines": 2,
+      "collisionRisk": "none"
+    },
+    {
+      "id": "stallNode6",
+      "elementType": "annotation",
+      "x": 700,
+      "y": 650,
+      "width": 180,
+      "height": 60,
+      "priority": "P2",
+      "textSize": 22,
+      "maxLines": 2,
+      "collisionRisk": "none"
+    },
+    {
+      "id": "metricCard1",
+      "elementType": "metricCard",
+      "x": 72,
+      "y": 860,
+      "width": 280,
+      "height": 140,
+      "priority": "P2",
+      "textSize": 28,
+      "maxLines": 2,
+      "collisionRisk": "none"
+    },
+    {
+      "id": "metricCard2",
+      "elementType": "metricCard",
+      "x": 400,
+      "y": 860,
+      "width": 280,
+      "height": 140,
+      "priority": "P2",
+      "textSize": 28,
+      "maxLines": 2,
+      "collisionRisk": "none"
+    },
+    {
+      "id": "metricCard3",
+      "elementType": "metricCard",
+      "x": 728,
+      "y": 860,
+      "width": 280,
+      "height": 140,
+      "priority": "P2",
+      "textSize": 28,
+      "maxLines": 2,
+      "collisionRisk": "none"
+    },
+    {
+      "id": "takeaway",
+      "elementType": "annotation",
+      "x": 72,
+      "y": 1050,
+      "width": 864,
+      "height": 80,
+      "priority": "P1",
+      "textSize": 38,
+      "maxLines": 2,
+      "collisionRisk": "none"
+    },
+    {
+      "id": "creatorSignature",
+      "elementType": "signature",
+      "x": 880,
+      "y": 1210,
+      "width": 200,
+      "height": 64,
+      "priority": "P2",
+      "collisionRisk": "none"
+    }
+  ],
+  "collisionCheck": {
+    "staticOverlapRisk": "none",
+    "animatedOverlapRisk": "none",
+    "finalFrameOverlapRisk": "none",
+    "mobileReadabilityRisk": "none",
+    "mitigationPlan": "No motion paths cross text; all bounding boxes non-overlapping.",
+    "safeToRender": true
+  },
+  "autoSimplification": {
+    "needed": false
+  },
+  "finalFrameCheck": {
+    "noOverlap": true,
+    "readableOnMobile": true,
+    "insideSafeMargins": true,
+    "notMidTransition": true,
+    "takeawayVisible": true,
+    "thumbnailSuitable": true
+  },
+  "contentType": "bottleneck_failure_point",
+  "primaryVisualFormat": "Pipeline with Blocked Node",
+  "secondarySupportingElement": "Metric card cluster for key success factors",
+  "formatSelectionReason": "The idea is about why POCs stall and what bridges the gap; a pipeline with blocked nodes directly visualizes the friction points.",
+  "antiRepetitionNote": "Avoids line chart used in recent post 'Automation adoption curve'; this is a workflow-based bottleneck diagram.",
+  "visualDiversityTags": [
+    "workflow",
+    "diagnostic",
+    "non_chart"
+  ],
+  "visualMood": [
+    "technical",
+    "system-like",
+    "editorial"
+  ],
+  "eyebrow": "OPERATING MODEL",
+  "headline": "Why Automation POCs Stall: The Missing Production Layer",
+  "visualization": {
+    "kind": "pipeline",
+    "data": {
+      "nodes": 7,
+      "stallPoints": [
+        3,
+        5,
+        6
+      ],
+      "stallLabels": [
+        "No Ownership",
+        "No Monitoring",
+        "No Failure Handling"
+      ]
+    }
+  },
+  "metrics": [
+    {
+      "label": "Ownership",
+      "value": "Clear Owner",
+      "accent": "mint"
+    },
+    {
+      "label": "Monitoring",
+      "value": "Observability",
+      "accent": "mint"
+    },
+    {
+      "label": "Failure Handling",
+      "value": "Resilience",
+      "accent": "mint"
+    }
+  ],
+  "takeaway": "Production automation needs ownership, monitoring, and failure handling — not just a working prototype.",
+  "accentStrategy": {
+    "dominantAccent": "cyan",
+    "supportingAccent": "orange",
+    "stateAccent": "mint"
+  },
+  "symbolicLayer": {
+    "iconStyle": "lucide",
+    "lucideIcons": [
+      "Workflow",
+      "ShieldAlert",
+      "Gauge",
+      "CircleDot"
+    ],
+    "allowedEmojis": []
+  },
+  "qualityChecklist": {
+    "readability": true,
+    "brandFit": true,
+    "mobileLegibility": true,
+    "restrainedAccents": true,
+    "matchesDesignSystemV2": true,
+    "withinSafeMargins": true,
+    "chartSimplifiedForMobile": true,
+    "diagramNotShrunkenIntoUnreadability": true,
+    "noLowContrastImportantText": true,
+    "illustrativeMetricsLabeled": true,
+    "contentTypeClassified": true,
+    "formatFitsContentType": true,
+    "visualDifferentFromRecent": true,
+    "chartJustifiedIfUsed": true,
+    "oneMainVisualIdea": true,
+    "avoidsCanvaAesthetic": true,
+    "noTextOverlap": true,
+    "noLabelsOverVisualsWithoutBacking": true,
+    "motionPathsRoutedAroundText": true,
+    "finalFrameCollisionFree": true,
+    "maxLinesRespected": true,
+    "complexityReducedNotShrunken": true,
+    "boundingBoxesDeclared": true,
+    "layoutSafeToRender": true,
+    "creatorSignaturePresent": true,
+    "creatorSignatureFirstSecondVisible": true,
+    "creatorSignatureFinalFrameVisible": true,
+    "creatorSignatureNoOverlap": true,
+    "creatorSignatureMobileReadable": true,
+    "hasPrimaryAccent": true,
+    "hasWarmContrast": true,
+    "hasDifferentiatorAccent": true,
+    "avoidsMonochrome": true,
+    "accentsHaveSemanticMeaning": true,
+    "mobileContrastPass": true
+  }
+}

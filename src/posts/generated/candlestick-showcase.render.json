@@ -1,0 +1,27 @@
+{
+  "id": "candlestick-showcase",
+  "eyebrow": "LATENCY AUDIT: THE DAILY p95 RANGE",
+  "headline": "Each day the agent's p95 latency swings within a band — the spread is the story, not the average",
+  "visualization": {
+    "kind": "candlestick",
+    "caption": "daily p95 latency (OHLC, ms)",
+    "unit": "ms",
+    "candles": [
+      { "label": "Mon", "open": 420, "high": 540, "low": 390, "close": 510 },
+      { "label": "Tue", "open": 510, "high": 560, "low": 470, "close": 480 },
+      { "label": "Wed", "open": 480, "high": 500, "low": 410, "close": 430 },
+      { "label": "Thu", "open": 430, "high": 470, "low": 400, "close": 460 },
+      { "label": "Fri", "open": 460, "high": 620, "low": 450, "close": 600 },
+      { "label": "Sat", "open": 600, "high": 640, "low": 540, "close": 560 },
+      { "label": "Sun", "open": 560, "high": 580, "low": 430, "close": 450 }
+    ]
+  },
+  "metrics": [
+    { "label": "Worst spike", "value": "640ms", "accent": "burnt" },
+    { "label": "Calmest close", "value": "430ms", "accent": "mint" },
+    { "label": "Widest day", "value": "Fri", "accent": "amber" },
+    { "label": "Up days", "value": "3 / 7", "accent": "cyan" }
+  ],
+  "takeaway": "Averaging the week hides the Friday blow-off and the Wednesday calm; the daily range is where the on-call pain actually lives.",
+  "signal": "latency telemetry"
+}

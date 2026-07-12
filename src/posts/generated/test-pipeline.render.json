@@ -1,0 +1,25 @@
+{
+  "id": "test-pipeline",
+  "eyebrow": "reliability / step count",
+  "headline": "Each step compounds the failure rate",
+  "visualization": {
+    "kind": "pipeline",
+    "caption": "95% per step over 10 steps",
+    "perStepLabel": "95% PER STEP",
+    "endLabel": "60%",
+    "endAccent": "burnt",
+    "nodes": [
+      { "step": 1, "cumulative": "95%" },
+      { "step": 2, "cumulative": "90%" },
+      { "step": 4, "cumulative": "81%" },
+      { "step": 6, "cumulative": "74%" },
+      { "step": 8, "cumulative": "66%" },
+      { "step": 10, "cumulative": "60%" }
+    ]
+  },
+  "metrics": [
+    { "label": "per-step", "value": "95%", "accent": "cyan" },
+    { "label": "10 steps", "value": "60%", "delta": "compounded", "accent": "burnt" }
+  ],
+  "takeaway": "Fewer steps, more verification."
+}

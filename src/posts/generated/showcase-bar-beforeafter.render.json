@@ -1,0 +1,27 @@
+{
+  "id": "showcase-bar-beforeafter",
+  "eyebrow": "AI SYSTEMS · AUTOMATION",
+  "headline": "Manual versus automated, by task",
+  "visualization": {
+    "kind": "bar",
+    "orientation": "vertical",
+    "mode": "grouped",
+    "valueLabels": "auto",
+    "unit": "min",
+    "caption": "minutes per task — before and after",
+    "seriesLabels": ["Manual", "Automated"],
+    "seriesAccents": ["amber", "cyan"],
+    "categories": [
+      { "label": "Triage", "values": [14, 2] },
+      { "label": "Draft", "values": [38, 6] },
+      { "label": "Cleanup", "values": [22, 3] },
+      { "label": "Route", "values": [9, 1] }
+    ]
+  },
+  "metrics": [
+    { "label": "Avg time cut", "value": "−84%", "accent": "mint" },
+    { "label": "Slowest before", "value": "Draft", "accent": "amber" }
+  ],
+  "takeaway": "Same tasks, a fraction of the minutes — the gap is the automation dividend.",
+  "signal": "Measure the before. The 'after' only means something standing next to it."
+}

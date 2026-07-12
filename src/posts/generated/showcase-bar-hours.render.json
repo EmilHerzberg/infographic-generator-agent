@@ -1,0 +1,27 @@
+{
+  "id": "showcase-bar-hours",
+  "eyebrow": "AI SYSTEMS · AUTOMATION",
+  "headline": "Hours I stopped spending each month",
+  "visualization": {
+    "kind": "bar",
+    "orientation": "vertical",
+    "mode": "simple",
+    "sort": "desc",
+    "valueLabels": "auto",
+    "unit": "h",
+    "caption": "monthly hours reclaimed, by workflow",
+    "categories": [
+      { "label": "Inbox triage", "value": 31, "accent": "amber" },
+      { "label": "Report drafts", "value": 24, "accent": "cyan" },
+      { "label": "Data cleanup", "value": 18, "accent": "cyan" },
+      { "label": "Meeting notes", "value": 12, "accent": "cyan" },
+      { "label": "Lead routing", "value": 7, "accent": "cyan" }
+    ]
+  },
+  "metrics": [
+    { "label": "Total / month", "value": "92h", "accent": "mint" },
+    { "label": "Biggest win", "value": "Inbox triage", "accent": "amber" }
+  ],
+  "takeaway": "The win was never the model. It was the 92 hours a month I stopped spending.",
+  "signal": "Automate the boring 80% first — the leverage is in the volume, not the hard cases."
+}
