@@ -1,4 +1,14 @@
-# marketing-content-generation
+<p align="center">
+  <a href="https://ai-videos.herzberg-dynamics.de/">
+    <img src=".github/assets/banner.png" alt="infographic-generator-agent — one line in, one on-brand video out" width="100%">
+  </a>
+</p>
+
+<p align="center">
+  <a href="https://ai-videos.herzberg-dynamics.de/"><b>▶&nbsp; Live showcase — watch real generated videos at ai-videos.herzberg-dynamics.de&nbsp;→</b></a>
+</p>
+
+# infographic-generator-agent
 
 **Turn a one-line brief into an on-brand animated video.** An AI agent classifies your idea, composes
 the right visualization — charts, diagrams, comparisons — as motion, and renders a vertical
@@ -13,10 +23,18 @@ There are two engines:
   QA gate (overflow, collisions, mobile floors) until it passes. More creative; it executes
   AI-generated code locally (see [SECURITY.md](SECURITY.md)).
 
+## What it produces
+
+<p align="center">
+  <img src=".github/assets/gallery.png" alt="Example outputs — different topics, one consistent visual style" width="100%">
+</p>
+
+<p align="center"><sub>Real outputs. Each started as a single line; the agent classified it, picked the visual form, and QA-corrected the layout.</sub></p>
+
 ## Quick start
 
 ```bash
-git clone <this-repo> && cd marketing-content-generation
+git clone https://github.com/EmilHerzberg/infographic-generator-agent && cd infographic-generator-agent
 npm install
 npx playwright install chromium      # the QA inspector renders headlessly
 cp .env.example .env                 # then add ONE provider key (see below)
