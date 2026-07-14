@@ -12,13 +12,13 @@
 
 **Turn a one-line brief into an on-brand animated video.** An AI agent classifies your idea, composes
 the right visualization — charts, diagrams, comparisons — as motion, and renders a vertical
-(1080×1350) MP4 with [Remotion](https://remotion.dev). Bring your own model key (DeepSeek, OpenAI,
-Anthropic, or Google Gemini). One consistent visual style, every output.
+(1080×1350) MP4 with [Remotion](https://remotion.dev). Bring your own model key — DeepSeek, OpenAI,
+Anthropic, Gemini, Vertex, or any OpenAI-compatible endpoint. One consistent visual style, every output.
 
 There are two engines:
 
 - **Path A** — the model emits a *validated JSON spec* that a fixed, layout-safe renderer draws. Cheap,
-  deterministic, fast (~2 iterations). No model-authored code runs.
+  deterministic, fast (typically ~2 QA iterations). No model-authored code runs.
 - **Path B** — the model *writes a real React/Remotion component* and self-corrects it through a headless
   QA gate (overflow, collisions, mobile floors) until it passes. More creative; it executes
   AI-generated code locally (see [SECURITY.md](SECURITY.md)).
@@ -40,45 +40,58 @@ npx playwright install chromium      # the QA inspector renders headlessly
 cp .env.example .env                 # then add ONE provider key (see below)
 ```
 
-**Generate a video from a brief:**
+**Generate a video from a brief.** Both engines drive the headless QA inspector, so start the dev server
+first and leave it running:
 
 ```bash
-# Path A (validated JSON → fixed primitives)
-npm run generate -- --provider deepseek --brief "Reliability compounds: 99% per step is 81.8% over twenty steps."
-
-# Path B (the agent writes + self-corrects a component) — needs the dev server running (see below)
-npm run agent -- --provider deepseek --brief "Reliability compounds: 99% per step is 81.8% over twenty steps."
+npm run dev            # terminal A — the QA / preview harness (keep running)
 ```
 
-**Inspect / preview a generated post** (two terminals):
+Then, in a second terminal:
 
 ```bash
-# terminal A — the preview harness the QA inspector also drives
-npm run dev
-# terminal B — generate, then open the id it prints:
-#   http://localhost:5173/?id=<post-id>
+# Path A — the model emits a validated JSON spec; a fixed, layout-safe renderer draws it, QA-gated.
+npm run render -- --provider deepseek --motion \
+  --brief "Reliability compounds: 99% per step is 81.8% over twenty steps." --id reliability
+# → writes src/posts/generated/reliability.render.json; then render the MP4:
+npm run remotion:render:gen -- reliability out/reliability.mp4
+
+# Path B — the agent WRITES and self-corrects a real React/Remotion component,
+# then renders the MP4 automatically once it passes the gates.
+npm run agent -- --provider deepseek --motion \
+  --brief "Reliability compounds: 99% per step is 81.8% over twenty steps." --id reliability
 ```
 
-**Render an MP4:**
+> **`--motion` is what produces video.** Without it, Path B emits a still PNG (`out/<id>.png`) and Path A a
+> single static frame. (`npm run generate` is a legacy, spec-only command — use `npm run render` for Path A.)
 
-```bash
-npm run remotion:studio     # interactive
-npm run remotion:render     # headless → out/
+**Preview / inspect a post.** The dev server above is a headless QA harness, not a landing page — open a
+specific post by id:
+
 ```
+http://localhost:5173/?id=reliability
+```
+
+With no `?id=` it shows an "unknown post id" helper listing the registered ids. The polished gallery lives
+at the [live showcase](https://ai-videos.herzberg-dynamics.de/).
 
 ## Providers
 
-You only need the key for the provider you use. Set it in `.env`:
+You only need the key for the provider you pass to `--provider`. Set it in `.env`:
 
-| Provider  | env var              | example model (default)     |
-|-----------|----------------------|-----------------------------|
-| DeepSeek  | `DEEPSEEK_API_KEY`   | `deepseek-v4-pro`           |
-| OpenAI    | `OPENAI_API_KEY`     | `gpt-5.5`                   |
-| Anthropic | `ANTHROPIC_API_KEY`  | `claude-opus-4-8`           |
-| Gemini    | `GEMINI_API_KEY`     | `gemini-2.5-pro`            |
+| `--provider` | env var(s)                                     | default model     |
+|--------------|------------------------------------------------|-------------------|
+| `deepseek`   | `DEEPSEEK_API_KEY`                             | `deepseek-v4-pro` |
+| `openai`     | `OPENAI_API_KEY`                              | `gpt-5.5`         |
+| `anthropic`  | `ANTHROPIC_API_KEY`                           | `claude-opus-4-8` |
+| `gemini`     | `GEMINI_API_KEY`                              | `gemini-2.5-pro`  |
+| `vertex`     | `GOOGLE_VERTEX_API_KEY` *or* a service account | `gemini-2.5-pro`  |
+| `compatible` | `COMPATIBLE_API_KEY` (+ `COMPATIBLE_BASE_URL`) | `openrouter/auto` |
 
-Override the model with `--model <id>` or the `<PROVIDER>_MODEL` env var. **Reasoning-tier models work
-best** — weaker/cheaper models often fail to converge in Path B's self-correction loop.
+`openai` is the **official** OpenAI API; `compatible` is **any OpenAI-compatible endpoint** (OpenRouter,
+Ollama, LM Studio, vLLM, …). Override the model with `--model <id>` or the `<PROVIDER>_MODEL` env var, and
+the endpoint with `<PROVIDER>_BASE_URL`. **Reasoning-tier models work best** — weaker/cheaper models often
+fail to converge in Path B's self-correction loop.
 
 ## How it works
 

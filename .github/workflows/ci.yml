@@ -8,6 +8,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history for the secret scan
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -15,3 +17,15 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm run build
+      # deterministic schema / provider branch-budget check (no API keys, no browser)
+      - run: npm run schema:budget:unit
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Secret scan (gitleaks)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

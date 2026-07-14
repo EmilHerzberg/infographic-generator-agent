@@ -1,11 +1,15 @@
 {
-  "name": "marketing-content-generation",
+  "name": "infographic-generator-agent",
   "version": "0.1.0",
   "private": false,
   "type": "module",
   "description": "An AI agent that turns a one-line brief into an on-brand animated video — charts, diagrams and comparisons as motion, rendered with Remotion. Bring your own model key (DeepSeek / OpenAI / Anthropic / Gemini).",
   "license": "MIT",
   "keywords": ["ai", "video", "remotion", "generative", "dataviz", "infographic", "agent"],
+  "homepage": "https://github.com/EmilHerzberg/infographic-generator-agent#readme",
+  "repository": { "type": "git", "url": "git+https://github.com/EmilHerzberg/infographic-generator-agent.git" },
+  "bugs": { "url": "https://github.com/EmilHerzberg/infographic-generator-agent/issues" },
+  "engines": { "node": ">=20" },
   "scripts": {
     "dev": "vite",
     "typecheck": "tsc --noEmit",
