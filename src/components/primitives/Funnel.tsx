@@ -25,19 +25,20 @@
 // Spec: planning/primitive-library/handoffs/PL-3.3-funnel.md §2.5 / §2.7, PM §3 (cap 5,
 // label ALWAYS "above").
 
-import { useId } from "react";
+import { useContext, useId } from "react";
 import type { Accent } from "@/posts/renderTypes";
-import { colors } from "@/tokens/design";
+import { colors, chartVScale } from "@/tokens/design";
+import { FormatContext } from "@/components/layout/formatContext";
 import { planCountUp } from "@/lib/countup";
 import {
   planFunnel,
   bandReveal,
   type FunnelStageInput,
   type FunnelMode,
+  type FunnelVGeom,
   type PlannedBand,
   type PlannedDrop,
   VIEW_W,
-  VIEW_H,
   BAND_RADIUS,
   TAPER_OPACITY,
   STAGE_LABEL_PX,
@@ -62,14 +63,18 @@ type Props = {
 
 export function Funnel({ stages, mode = "funnel", unit, dropLabels = "auto", accent = "cyan", caption, t = 1 }: Props) {
   const uid = useId();
-  const plan = planFunnel(stages, mode, unit, accent, dropLabels);
+  // Vertical-fill (Emil's format-bench feedback): stretch the band area + band heights on the tall
+  // aspect. 1 on portrait/square (byte-identical; the checks never pass it).
+  const vScale = chartVScale(useContext(FormatContext));
+  const plan = planFunnel(stages, mode, unit, accent, dropLabels, vScale);
+  const vg = plan.vgeom;
 
   // C2 — caption-only fallback (<2 renderable stages). A single stage can't express attrition; a
   // "no data" string reads as a bug in a published video (PL-3.2 empty-state ruling, §3 ruling 2).
   if (plan.fallback) {
     return (
       <svg
-        viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
+        viewBox={`0 0 ${VIEW_W} ${vg.VIEW_H}`}
         preserveAspectRatio="xMidYMid meet"
         className="block h-full w-full"
         role="img"
@@ -85,7 +90,7 @@ export function Funnel({ stages, mode = "funnel", unit, dropLabels = "auto", acc
 
   return (
     <svg
-      viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
+      viewBox={`0 0 ${VIEW_W} ${vg.VIEW_H}`}
       preserveAspectRatio="xMidYMid meet"
       className="block h-full w-full"
       role="img"
@@ -98,12 +103,12 @@ export function Funnel({ stages, mode = "funnel", unit, dropLabels = "auto", acc
       {plan.mode === "funnel" &&
         plan.bands.slice(0, -1).map((band, i) => {
           const next = plan.bands[i + 1];
-          return <TaperWall key={`${uid}-w${i}`} from={band} to={next} t={t} />;
+          return <TaperWall key={`${uid}-w${i}`} from={band} to={next} t={t} vg={vg} />;
         })}
 
       {/* Bands — each reveals via a per-band clip whose height grows top→down (paint-only). */}
       {plan.bands.map((band) => (
-        <Band key={`${uid}-b${band.index}`} band={band} mode={plan.mode} uid={uid} t={t} frameOn={frameOn} />
+        <Band key={`${uid}-b${band.index}`} band={band} mode={plan.mode} uid={uid} t={t} frameOn={frameOn} vg={vg} />
       ))}
 
       {/* Drop-off % labels — friction accent, between consecutive bands, after both settle. */}
@@ -121,17 +126,19 @@ function Band({
   uid,
   t,
   frameOn,
+  vg,
 }: {
   band: PlannedBand;
   mode: FunnelMode;
   uid: string;
   t: number;
   frameOn: number;
+  vg: FunnelVGeom;
 }) {
   // Continuous-edge reveal: the band fills from its TOP as the descending edge crosses it. g is the
   // visible fraction of the band height. At settle (g >= 1) the clip is OMITTED — the rect paints
   // in full (never a 0.9997-height clip), so t=1 rasterizes identical to a static SVG (C12).
-  const g = bandReveal(t, band.yTop, band.bandH);
+  const g = bandReveal(t, band.yTop, band.bandH, vg.ROW_Y0, vg.ROW_Y1);
   const settled = g >= 1;
   const clipId = `${uid}-clip-${band.index}`;
   const fill = accentHex(band.accentKey);
@@ -230,7 +237,7 @@ function Band({
 }
 
 // ── Taper wall (funnel mode) ────────────────────────────────────────────────────────────────────
-function TaperWall({ from, to, t }: { from: PlannedBand; to: PlannedBand; t: number }) {
+function TaperWall({ from, to, t, vg }: { from: PlannedBand; to: PlannedBand; t: number; vg: FunnelVGeom }) {
   // The wall connects band `from`'s bottom edge to band `to`'s top edge. It reveals with the SAME
   // descending edge as the band below it (paint-only: a clip from its top), so the silhouette draws
   // as one continuous edge. Fill-only (PM §3 minor note: no invented stroke), low-opacity accent.
@@ -244,7 +251,7 @@ function TaperWall({ from, to, t }: { from: PlannedBand; to: PlannedBand; t: num
   // Reveal the wall as the edge crosses the gap between the two bands.
   const gapTop = from.yBottom;
   const gapH = Math.max(1e-6, to.yTop - from.yBottom);
-  const g = bandReveal(t, gapTop, gapH);
+  const g = bandReveal(t, gapTop, gapH, vg.ROW_Y0, vg.ROW_Y1);
   const opacity = g <= 0 ? 0 : TAPER_OPACITY;
 
   return (

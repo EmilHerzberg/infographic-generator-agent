@@ -14,7 +14,9 @@ import {
 } from "remotion";
 import { useState, useEffect } from "react";
 import { easings } from "@/tokens/motion";
-import { formats, layout } from "@/tokens/design";
+import { formats, layout, resolveFormat } from "@/tokens/design";
+import { FormatContext } from "@/components/layout/formatContext";
+import { SignatureContext, type SignatureConfig } from "@/components/layout/signatureContext";
 import { postDurationSeconds, isNarrativePost, narrativeProgressT } from "@/lib/narrative";
 import PostRenderer from "@/posts/PostRenderer";
 import "@/remotion/fonts";
@@ -27,6 +29,18 @@ const fmt = formats[layout.defaultFormat];
 // webpack-only (Remotion bundler). Typed loosely; never imported by Vite/tsc paths.
 const ctx = (require as any).context("../posts/generated", false, /\.tsx$/); // Path B (TSX)
 const renderCtx = (require as any).context("../posts/generated", false, /\.render\.json$/); // Path A (JSON)
+// Path B carries no format IN the TSX (it's a job choice, not model-authored); renderSpec writes a
+// <id>.meta.json sidecar so the render is sized to the chosen format. Absent ⇒ portrait (byte-identical).
+const metaCtx = (require as any).context("../posts/generated", false, /\.meta\.json$/);
+// The <id>.meta.json sidecar carries render-time job choices that are NOT in the model-authored TSX:
+// the output `format` and the author `signature` (see signatureContext). Absent ⇒ {} (portrait, brand
+// default), so anything without a sidecar is byte-identical to before.
+function tsxMeta(id: string): { format?: string; signature?: SignatureConfig } {
+  const key = `./${id}.meta.json`;
+  if (!metaCtx.keys().includes(key)) return {};
+  const m = metaCtx(key);
+  return m.default ?? m;
+}
 
 function useProgressT(linear = false) {
   const frame = useCurrentFrame();
@@ -59,30 +73,39 @@ function useFontsReady() {
   }, [handle]);
 }
 
-function wrap(Comp: any) {
+function wrap(Comp: any, format = layout.defaultFormat, signature: SignatureConfig | null = null) {
   return function GeneratedComposition() {
     useFontsReady();
     return (
       <AbsoluteFill style={{ backgroundColor: "#0E1116" }}>
-        <Comp t={useProgressT()} />
+        <FormatContext.Provider value={format}>
+          <SignatureContext.Provider value={signature}>
+            <Comp t={useProgressT()} />
+          </SignatureContext.Provider>
+        </FormatContext.Provider>
       </AbsoluteFill>
     );
   };
 }
 
-function wrapJson(post: any) {
+function wrapJson(post: any, signature: SignatureConfig | null = null) {
   const linear = isNarrativePost(post); // PL-4.1: narrative posts get a linear frame→t (see useProgressT)
+  const format = resolveFormat(post.format);
   return function GeneratedJsonComposition() {
     useFontsReady();
     return (
       <AbsoluteFill style={{ backgroundColor: "#0E1116" }}>
-        <PostRenderer post={post} t={useProgressT(linear)} />
+        <FormatContext.Provider value={format}>
+          <SignatureContext.Provider value={signature}>
+            <PostRenderer post={post} t={useProgressT(linear)} />
+          </SignatureContext.Provider>
+        </FormatContext.Provider>
       </AbsoluteFill>
     );
   };
 }
 
-function comp(id: string, component: any, durS = DEFAULT_DURATION_S) {
+function comp(id: string, component: any, durS = DEFAULT_DURATION_S, dims = fmt) {
   return (
     <Composition
       key={id}
@@ -90,8 +113,8 @@ function comp(id: string, component: any, durS = DEFAULT_DURATION_S) {
       component={component}
       durationInFrames={Math.round(durS * FPS)}
       fps={FPS}
-      width={fmt.width}
-      height={fmt.height}
+      width={dims.width}
+      height={dims.height}
     />
   );
 }
@@ -103,7 +126,12 @@ export function GeneratedRoot() {
         const id = key.replace(/^\.\//, "").replace(/\.tsx$/, "");
         const mod = ctx(key);
         if (!mod.default) return null;
-        return comp(id, wrap(mod.default), mod.durationInSeconds);
+        // Path B format + author signature: from the <id>.meta.json sidecar (absent ⇒ portrait, brand
+        // default). The component fills the composition; sizing here + FormatContext/SignatureContext
+        // (in wrap) make it render at the chosen aspect with the chosen (or no) signature.
+        const m = tsxMeta(id);
+        const f = resolveFormat(m.format);
+        return comp(id, wrap(mod.default, f, m.signature ?? null), mod.durationInSeconds, formats[f]);
       })}
       {(renderCtx.keys() as string[]).map((key) => {
         const id = key.replace(/^\.\//, "").replace(/\.render\.json$/, "");
@@ -113,7 +141,9 @@ export function GeneratedRoot() {
         // posts return DEFAULT_DURATION_S byte-identically (postDurationSeconds is a pure no-op
         // on them — same 14s). useProgressT is unchanged; a longer durationInFrames just stretches
         // the same 0..1 `t`, and the narrative plan lives entirely in `t`-space.
-        return comp(id, wrapJson(spec), postDurationSeconds(spec, DEFAULT_DURATION_S));
+        // Per-post output format: the composition is sized to spec.format (absent → portrait), the
+        // SAME value the Preview canvas + PostFrame resolve — Preview↔Remotion stay in lockstep.
+        return comp(id, wrapJson(spec, tsxMeta(id).signature ?? null), postDurationSeconds(spec, DEFAULT_DURATION_S), formats[resolveFormat(spec.format)]);
       })}
     </>
   );

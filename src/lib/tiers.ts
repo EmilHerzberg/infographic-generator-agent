@@ -39,7 +39,7 @@ export const CHIP_TRACK_WIDTH = TRACK_WIDTH - 2 * TIER_PAD_X; // 864 — the rea
 export const CHIP_PAD_X = 20; // C7 — horizontal padding inside a chip
 export const CHIP_GAP = 16; // C7 — gap between chips (≥ the 14px crampedPairs floor)
 export const CHIP_MIN_WIDTH = 112; // C5 — a chip is never narrower than ~one short word
-export const CHIP_FONT = 24; // chip label source size (C8 — 24 × FitLine zoom ≥ 18)
+export const CHIP_FONT = 27; // chip label source size (C8 — 27 × FitLine zoom ≥ 18; raised 24→27, Emil's format-bench readability feedback)
 export const TIER_LABEL_FONT = 28; // tier label source size
 
 // ── Data caps (§2.4) ─────────────────────────────────────────────────────────────────────
@@ -117,14 +117,14 @@ export function chipWidth(label: string): number {
  * chip sits where — collision is decided in pure JS, never left to CSS flex-wrap (§2.5.3). Chips
  * past `maxRows` are marked hidden(rowBudget). Returns the row layout of visible chips.
  */
-function binPack(chips: PlannedChip[], maxRows: number): PlannedChip[][] {
+function binPack(chips: PlannedChip[], maxRows: number, trackW: number = CHIP_TRACK_WIDTH): PlannedChip[][] {
   const rows: PlannedChip[][] = [];
   let row: PlannedChip[] = [];
   let rowW = 0;
   for (const chip of chips) {
     if (chip.hidden) continue; // already hidden (tooThin) — never enters a row
     const add = (row.length === 0 ? 0 : CHIP_GAP) + chip.width;
-    if (row.length > 0 && rowW + add > CHIP_TRACK_WIDTH) {
+    if (row.length > 0 && rowW + add > trackW) {
       // Row full — start a new one if the budget allows, else this chip (and the rest) drop.
       rows.push(row);
       if (rows.length >= maxRows) {
@@ -151,12 +151,12 @@ function binPack(chips: PlannedChip[], maxRows: number): PlannedChip[][] {
 }
 
 /** Does this tier's bin-pack need 2 rows (vs 1)? Pure measure used for the C6b budget. */
-function rowsNeeded(chips: PlannedChip[]): number {
+function rowsNeeded(chips: PlannedChip[], trackW: number = CHIP_TRACK_WIDTH): number {
   let rows = 1;
   let rowW = 0;
   for (const chip of chips) {
     const add = (rowW === 0 ? 0 : CHIP_GAP) + chip.width;
-    if (rowW > 0 && rowW + add > CHIP_TRACK_WIDTH) {
+    if (rowW > 0 && rowW + add > trackW) {
       rows++;
       rowW = chip.width;
     } else {
@@ -174,8 +174,12 @@ function rowsNeeded(chips: PlannedChip[]): number {
 export function planTiers(
   rawTiers: ReadonlyArray<TierInput> | undefined,
   modeIn: TierMode | string | undefined,
+  /** Adaptive density (Emil's format-bench feedback): a NARROWER pack width wraps rows earlier so
+   *  tall formats get FEWER, WIDER chips per row. Omitted → CHIP_TRACK_WIDTH (byte-identical). */
+  opts?: { packWidth?: number; twoRowQuota?: number },
 ): TiersPlan {
   const mode: TierMode = modeIn === "ranked" ? "ranked" : "tiers"; // unknown/missing → "tiers"
+  const packW = Math.max(300, Math.min(CHIP_TRACK_WIDTH, opts?.packWidth ?? CHIP_TRACK_WIDTH));
 
   const dropped: TiersDropped = { tiersDropped: 0, itemsDropped: 0, hiddenChips: 0, truncatedLabels: 0 };
 
@@ -245,18 +249,20 @@ export function planTiers(
   // tiers ≤ 3, up to two 2-row tiers. Decide each tier's row budget BEFORE packing: a tier that
   // *would* need 2 rows only gets them while the two-row quota remains; otherwise it packs into 1
   // row and the overflow drops (rowBudget). Earlier tiers (top→bottom) get first claim on the quota.
-  const twoRowQuota = built.length >= 4 ? 1 : 2;
+  // Adaptive density passes a wider quota with the narrower pack width (tall formats have the
+  // height for a 2-row band in EVERY tier — the C6b proof is a portrait-height constraint).
+  const twoRowQuota = opts?.twoRowQuota ?? (built.length >= 4 ? 1 : 2);
   let twoRowUsed = 0;
 
   const tiers: PlannedTier[] = built.map(({ tier, chips }, index) => {
     const visible = chips.filter((c) => !c.hidden);
-    const wants2 = rowsNeeded(visible) >= 2;
+    const wants2 = rowsNeeded(visible, packW) >= 2;
     let maxRows = 1;
     if (wants2 && twoRowUsed < twoRowQuota) {
       maxRows = MAX_ROWS_PER_TIER;
       twoRowUsed++;
     }
-    const rows = binPack(chips, maxRows);
+    const rows = binPack(chips, maxRows, packW);
     return {
       label: tier.label,
       accentKey: accentForTier(tier.accent, index),

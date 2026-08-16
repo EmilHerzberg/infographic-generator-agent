@@ -20,9 +20,10 @@
 // the inspector reads viewBox coordinates as the single deterministic system.
 // Spec: planning/primitive-library/handoffs/PL-2.4-area.md §2.5 / §2.7 / §3.
 
-import { useId } from "react";
+import { useContext, useId, useLayoutEffect, useRef, useState } from "react";
 import type { Accent } from "@/posts/renderTypes";
-import { colors, stroke } from "@/tokens/design";
+import { colors, stroke, chartVScale } from "@/tokens/design";
+import { FormatContext } from "@/components/layout/formatContext";
 import {
   planArea,
   areaEdge,
@@ -32,12 +33,8 @@ import {
   type PlannedSeries,
   type PlannedAreaAnnotation,
   VIEW_W,
-  VIEW_H,
   PLOT_X0,
   PLOT_X1,
-  PLOT_Y0,
-  BASELINE_Y,
-  X_LABEL_Y,
   AREA_STROKE,
   FILL_OPACITY_SIMPLE,
   FILL_OPACITY_STACKED,
@@ -84,26 +81,56 @@ export function AreaChart({
   t = 1,
 }: Props) {
   const uid = useId();
-  const plan = planArea({ series, xLabels, mode, valueLabels, axisMin, axisMax, unit, annotations });
+  // Vertical-fill (Emil's 9:16 feedback): stretch every plot y + the viewBox height on the tall aspect so
+  // the fill dominates the frame. The SAME vScale drives the plan (edge paths) AND the axis/label geometry
+  // below — read from FormatContext, 1 on portrait/square (byte-identical; the checks never pass it).
+  const vScale = chartVScale(useContext(FormatContext));
+
+  // PL-0.8 — row-aware viewBox (the histogram/scatter/candlestick pattern): measure the row's px
+  // aspect so the viewBox matches it and the SVG fills the FULL row width instead of letterboxing the
+  // fixed-height box into a short square row. The vScale geometry stays the plan-side CEILING, so the
+  // vertical fill is unchanged. Pre-measure default = undefined ⇒ ceiling ⇒ static import byte-identical.
+  const boxRef = useRef<HTMLDivElement>(null);
+  const [rowViewH, setRowViewH] = useState<number | undefined>(undefined);
+  useLayoutEffect(() => {
+    const box = boxRef.current;
+    if (!box) return;
+    const measure = () => {
+      const w = box.clientWidth;
+      const h = box.clientHeight;
+      if (!w || !h) return;
+      const next = (VIEW_W * h) / w;
+      setRowViewH((prev) => (prev == null || Math.abs(prev - next) > 0.5 ? next : prev));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(box);
+    return () => ro.disconnect();
+  }, []);
+
+  const plan = planArea({ series, xLabels, mode, valueLabels, axisMin, axisMax, unit, annotations, vScale, viewH: rowViewH });
+  const AV = plan.vgeom;
 
   const frameOn = clamp01((t - 0.26) / 0.08); // axis/gridlines/x-labels/legend appear (opacity-only)
 
   // viewBox px position of a value along the value axis (gridlines + ticks). axisMin is 0.
   const span = plan.axisMax - plan.axisMin || 1;
-  const growLen = BASELINE_Y - PLOT_Y0;
-  const valueY = (v: number) => BASELINE_Y - ((v - plan.axisMin) / span) * growLen;
+  const growLen = AV.BASELINE_Y - AV.PLOT_Y0;
+  const valueY = (v: number) => AV.BASELINE_Y - ((v - plan.axisMin) / span) * growLen;
 
   if (plan.empty) {
     return (
-      <svg
-        viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
-        className="block h-full w-full"
-        role="img"
-        aria-label={caption ?? "magnitude over an ordered axis"}
-        data-area
-        data-area-mode={plan.mode}
-        data-area-empty
-      />
+      <div ref={boxRef} className="relative h-full w-full">
+        <svg
+          viewBox={`0 0 ${VIEW_W} ${AV.VIEW_H}`}
+          className="block h-full w-full"
+          role="img"
+          aria-label={caption ?? "magnitude over an ordered axis"}
+          data-area
+          data-area-mode={plan.mode}
+          data-area-empty
+        />
+      </div>
     );
   }
 
@@ -119,8 +146,9 @@ export function AreaChart({
   const labelStart = endLabelStart();
 
   return (
+    <div ref={boxRef} className="relative h-full w-full">
     <svg
-      viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
+      viewBox={`0 0 ${VIEW_W} ${AV.VIEW_H}`}
       className="block h-full w-full"
       role="img"
       aria-label={caption ?? "magnitude over an ordered axis"}
@@ -134,7 +162,7 @@ export function AreaChart({
             data-area-clip
             data-area-clip-w={clipW}
             x={PLOT_X0}
-            y={PLOT_Y0 - clipPadY}
+            y={AV.PLOT_Y0 - clipPadY}
             width={Math.max(0, clipW)}
             height={growLen + clipPadY * 2}
           />
@@ -143,7 +171,7 @@ export function AreaChart({
 
       {/* Axis baseline + ticks + gridlines (opacity-only reveal; geometry reserved frame 1). */}
       <g opacity={frameOn} data-area-axis>
-        <line x1={PLOT_X0} x2={PLOT_X1} y1={BASELINE_Y} y2={BASELINE_Y} stroke={GRID_COLOR} strokeWidth={stroke.grid} data-area-baseline />
+        <line x1={PLOT_X0} x2={PLOT_X1} y1={AV.BASELINE_Y} y2={AV.BASELINE_Y} stroke={GRID_COLOR} strokeWidth={stroke.grid} data-area-baseline />
         {plan.ticks.map((tick, i) => {
           const p = valueY(tick);
           return (
@@ -175,7 +203,7 @@ export function AreaChart({
             <text
               key={`${uid}-x-${xt.index}`}
               x={xt.x}
-              y={X_LABEL_Y + AXIS_LABEL_PX}
+              y={AV.X_LABEL_Y + AXIS_LABEL_PX}
               textAnchor={anchor}
               fill={colors.text.primary}
               fontFamily="'JetBrains Mono', monospace"
@@ -189,21 +217,37 @@ export function AreaChart({
         })}
       </g>
 
-      {/* Legend (stacked, ≥1 non-empty label) — top band, opacity-only. */}
+      {/* Legend (stacked, ≥1 non-empty label) — top band, opacity-only. Items are laid out
+          CUMULATIVELY from a measured width estimate (mono advance ≈ 0.68em incl. letter-spacing):
+          the old fixed 200px pitch let a long label run under the next chip ("Cached inpu[t]" —
+          Emil's format-bench feedback). Items that no longer fit the band are dropped whole. */}
       {plan.mode === "stacked" && plan.legend.some((l) => l.label.trim().length > 0) && (
         <g opacity={frameOn} data-area-legend>
-          {plan.legend.map((leg, i) => {
-            const chipX = PLOT_X0 + i * 200;
-            if (chipX > VIEW_W - 80 || leg.label.trim().length === 0) return null;
-            return (
-              <g key={`${uid}-leg-${i}`} transform={`translate(${chipX} 40)`}>
-                <rect x={0} y={-14} width={18} height={18} rx={3} fill={accentHex(leg.accentKey)} />
-                <text x={26} y={2} fill={colors.text.secondary} fontFamily="'JetBrains Mono', monospace" fontSize={AXIS_LABEL_PX} letterSpacing="0.06em">
-                  {leg.label.slice(0, 14)}
-                </text>
-              </g>
-            );
-          })}
+          {(() => {
+            const CHIP_W = 18, CHIP_GAP = 8, ITEM_GAP = 36;
+            const EST = AXIS_LABEL_PX * 0.68;
+            let x = PLOT_X0;
+            let full = false; // once one item doesn't fit, drop ALL later ones — never out of series order
+            return plan.legend.map((leg, i) => {
+              if (leg.label.trim().length === 0) return null;
+              const label = leg.label.length > 18 ? `${leg.label.slice(0, 17)}…` : leg.label;
+              const itemW = CHIP_W + CHIP_GAP + label.length * EST;
+              if (full || x + itemW > VIEW_W - 40) {
+                full = true;
+                return null;
+              }
+              const gx = x;
+              x += itemW + ITEM_GAP;
+              return (
+                <g key={`${uid}-leg-${i}`} transform={`translate(${gx} 40)`}>
+                  <rect x={0} y={-14} width={CHIP_W} height={18} rx={3} fill={accentHex(leg.accentKey)} />
+                  <text x={CHIP_W + CHIP_GAP} y={2} fill={colors.text.secondary} fontFamily="'JetBrains Mono', monospace" fontSize={AXIS_LABEL_PX} letterSpacing="0.06em">
+                    {label}
+                  </text>
+                </g>
+              );
+            });
+          })()}
         </g>
       )}
 
@@ -218,7 +262,7 @@ export function AreaChart({
       {/* End labels — fade in after the edge passes (right gutter, fit-or-hide via the plan). */}
       {plan.series.map((s, i) =>
         s.endLabel.show ? (
-          <EndLabel key={`${uid}-end-${i}`} s={s} t={t} labelStart={labelStart} />
+          <EndLabel key={`${uid}-end-${i}`} s={s} t={t} labelStart={labelStart} plotY0={AV.PLOT_Y0} baselineY={AV.BASELINE_Y} />
         ) : null,
       )}
 
@@ -229,6 +273,7 @@ export function AreaChart({
         a.show ? <AreaAnnotation key={`${uid}-ann-${i}`} a={a} index={i} t={t} /> : null,
       )}
     </svg>
+    </div>
   );
 }
 
@@ -247,11 +292,17 @@ function AreaAnnotation({ a, index, t }: { a: PlannedAreaAnnotation; index: numb
         strokeWidth={ANN_LEADER}
         data-area-annleader
       />
+      {/* paint-order halo: the callout can sit over a fill (stacked envelope, tall simple areas) —
+          a background-ink stroke under the glyphs keeps it readable on ANY band color. */}
       <text
         x={a.label.x}
         y={a.label.y}
         textAnchor={a.label.anchor}
         fill="#B8B2A7"
+        stroke="#0E1116"
+        strokeWidth={7}
+        strokeLinejoin="round"
+        paintOrder="stroke"
         fontFamily="'JetBrains Mono', monospace"
         fontSize={ANN_LABEL_PX}
         letterSpacing="0.02em"
@@ -286,16 +337,23 @@ function AreaLayer({ s, index, stacked }: { s: PlannedSeries; index: number; sta
 }
 
 // ── Per-series end label (right gutter, right-anchored) — fades in after the edge passes ─────────
-function EndLabel({ s, t, labelStart }: { s: PlannedSeries; t: number; labelStart: number }) {
+function EndLabel({ s, t, labelStart, plotY0, baselineY }: { s: PlannedSeries; t: number; labelStart: number; plotY0: number; baselineY: number }) {
   const op = clamp01((t - labelStart) / LABEL_STAMP_DUR);
   // Clamp the baseline inside the plot so a low-ending series never drops into the x-label band.
-  const y = Math.max(PLOT_Y0 + END_LABEL_PX, Math.min(s.endLabel.y + 9, BASELINE_Y - 4));
+  const y = Math.max(plotY0 + END_LABEL_PX, Math.min(s.endLabel.y + 9, baselineY - 4));
   return (
     <text
       x={s.endLabel.x}
       y={y}
       textAnchor="end"
       fill={accentHex(s.accentKey)}
+      // Readability halo (matches the annotation label): in a STACKED area the end label sits at its
+      // series' edge and paints accent-on-same-accent over the fill/rim — a dark backing stroke under
+      // the glyphs keeps it legible on any band. paintOrder:stroke draws the halo first, glyph on top.
+      stroke="#0E1116"
+      strokeWidth={6}
+      strokeLinejoin="round"
+      paintOrder="stroke"
       fontFamily="'Space Grotesk', sans-serif"
       fontWeight={600}
       fontSize={END_LABEL_PX}

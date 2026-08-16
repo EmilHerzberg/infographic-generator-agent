@@ -22,7 +22,7 @@
 // the inspector reads viewBox coordinates as the single deterministic system.
 // Spec: planning/primitive-library/handoffs/PL-2.6-histogram.md §2.5 / §2.7.
 
-import { useId } from "react";
+import { useId, useLayoutEffect, useRef, useState } from "react";
 import type { Accent } from "@/posts/renderTypes";
 import { colors } from "@/tokens/design";
 import {
@@ -30,6 +30,7 @@ import {
   barGrow,
   markerReveal,
   formatTick,
+  clampViewH,
   type HistogramBinInput,
   type HistogramMarkerInput,
   type HistKnobMarkers,
@@ -40,8 +41,6 @@ import {
   VIEW_H,
   PLOT_X0,
   PLOT_X1,
-  PLOT_Y0,
-  BASELINE_Y,
   MARKER_STROKE,
   MARKER_LABEL_PX,
   BIN_LABEL_PX,
@@ -87,24 +86,51 @@ export function HistogramChart({
   t = 1,
 }: Props) {
   const uid = useId();
-  const plan = planHistogram({ values, bins, binCount, xLabel, yLabel, xUnit, markers, markerLines, axisMin, axisMax, valueLabels, accent });
+
+  // PL-0.8 — row-aware viewBox (the ScatterPlot/Candlestick pattern): measure the row's px aspect so
+  // the viewBox aspect MATCHES it and the SVG fills the FULL row width instead of letterboxing the
+  // fixed 640-high box into a short square row at half width. Synchronous useLayoutEffect measure
+  // (applied before paint → Remotion captures the settled frame) + a ResizeObserver for later
+  // resizes. Pre-measure default = 640 (today's geometry) ⇒ static/SSR import byte-identical.
+  const boxRef = useRef<HTMLDivElement>(null);
+  const [viewH, setViewH] = useState(VIEW_H);
+  useLayoutEffect(() => {
+    const box = boxRef.current;
+    if (!box) return;
+    const measure = () => {
+      const w = box.clientWidth;
+      const h = box.clientHeight;
+      if (!w || !h) return;
+      const next = clampViewH((VIEW_W * h) / w);
+      setViewH((prev) => (Math.abs(prev - next) > 0.5 ? next : prev));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(box);
+    return () => ro.disconnect();
+  }, []);
+
+  const plan = planHistogram({ values, bins, binCount, xLabel, yLabel, xUnit, markers, markerLines, axisMin, axisMax, valueLabels, accent, viewH });
+  const { plotY0, baselineY, viewH: vbH } = plan;
 
   const frameOn = clamp01((t - 0.26) / 0.08); // axis baseline + gridlines + ticks + titles appear
 
   // viewBox px of a count value along the y-axis (for gridlines + ticks).
-  const growLen = BASELINE_Y - PLOT_Y0;
-  const countPos = (c: number) => BASELINE_Y - (c / (plan.axisMaxCount || 1)) * growLen;
+  const growLen = baselineY - plotY0;
+  const countPos = (c: number) => baselineY - (c / (plan.axisMaxCount || 1)) * growLen;
 
   if (plan.empty) {
     return (
-      <svg
-        viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
-        className="block h-full w-full"
-        role="img"
-        aria-label={caption ?? "distribution histogram"}
-        data-histogram
-        data-histogram-empty
-      />
+      <div ref={boxRef} className="relative h-full w-full">
+        <svg
+          viewBox={`0 0 ${VIEW_W} ${vbH}`}
+          className="block h-full w-full"
+          role="img"
+          aria-label={caption ?? "distribution histogram"}
+          data-histogram
+          data-histogram-empty
+        />
+      </div>
     );
   }
 
@@ -112,8 +138,9 @@ export function HistogramChart({
   const fill = accentHex(plan.accentKey);
 
   return (
+    <div ref={boxRef} className="relative h-full w-full">
     <svg
-      viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
+      viewBox={`0 0 ${VIEW_W} ${vbH}`}
       className="block h-full w-full"
       role="img"
       aria-label={caption ?? "distribution histogram"}
@@ -123,7 +150,7 @@ export function HistogramChart({
           reveal; geometry reserved frame 1. */}
       <g opacity={frameOn} data-histogram-axis>
         {/* Count baseline (count = 0). */}
-        <line x1={PLOT_X0} x2={PLOT_X1} y1={BASELINE_Y} y2={BASELINE_Y} stroke={GRID_COLOR} strokeWidth={1.5} data-histogram-baseline />
+        <line x1={PLOT_X0} x2={PLOT_X1} y1={baselineY} y2={baselineY} stroke={GRID_COLOR} strokeWidth={1.5} data-histogram-baseline />
         {/* Count y-gridlines + ticks (left gutter, right-anchored at PLOT_X0−12). */}
         {plan.countTicks.map((tick, i) => {
           const y = countPos(tick);
@@ -152,10 +179,10 @@ export function HistogramChart({
           const anchor = ei === 0 ? "start" : ei === plan.edges.length - 1 ? "end" : "middle";
           return (
             <g key={`${uid}-xt-${ei}`} data-histogram-xtick={ei}>
-              <line x1={x} x2={x} y1={BASELINE_Y} y2={BASELINE_Y + 8} stroke={GRID_COLOR} strokeWidth={1.5} />
+              <line x1={x} x2={x} y1={baselineY} y2={baselineY + 8} stroke={GRID_COLOR} strokeWidth={1.5} />
               <text
                 x={x}
-                y={BASELINE_Y + 32}
+                y={baselineY + 32}
                 textAnchor={anchor}
                 fill={colors.text.tertiary}
                 fontFamily="'JetBrains Mono', monospace"
@@ -173,7 +200,7 @@ export function HistogramChart({
         {plan.xLabel.trim().length > 0 && (
           <text
             x={(PLOT_X0 + PLOT_X1) / 2}
-            y={VIEW_H - 8}
+            y={vbH - 8}
             textAnchor="middle"
             fill={colors.text.secondary}
             fontFamily="'Space Grotesk', sans-serif"
@@ -187,7 +214,7 @@ export function HistogramChart({
         {plan.yLabel.trim().length > 0 && (
           <text
             x={PLOT_X0}
-            y={PLOT_Y0 - 18}
+            y={plotY0 - 18}
             textAnchor="start"
             fill={colors.text.secondary}
             fontFamily="'Space Grotesk', sans-serif"
@@ -202,26 +229,27 @@ export function HistogramChart({
 
       {/* Bins — contiguous (gap=0), grow from the baseline; transform OMITTED at settle. */}
       {plan.bins.map((bin) => (
-        <HistBin key={`${uid}-bin${bin.index}`} bin={bin} fill={fill} t={t} />
+        <HistBin key={`${uid}-bin${bin.index}`} bin={bin} fill={fill} baselineY={baselineY} t={t} />
       ))}
 
       {/* Stat markers — NEUTRAL dashed vertical lines drawn AFTER bins settle (§3 ruling 3).
           ABSENT when off / suppressed. */}
       {plan.markers.map((m, i) => (
-        <Marker key={`${uid}-m${i}`} marker={m} index={i} reveal={reveal} />
+        <Marker key={`${uid}-m${i}`} marker={m} index={i} reveal={reveal} plotY0={plotY0} baselineY={baselineY} />
       ))}
     </svg>
+    </div>
   );
 }
 
 // ── One bin: contiguous rect with a baseline-anchored CSS grow (§3 ruling 1) ────────────────
-function HistBin({ bin, fill, t }: { bin: PlannedBin; fill: string; t: number }) {
+function HistBin({ bin, fill, baselineY, t }: { bin: PlannedBin; fill: string; baselineY: number; t: number }) {
   const grow = barGrow(t, bin.binStart);
   const settled = grow >= 1;
-  // Baseline-anchored grow transform (§3 ruling 1): scale Y about BASELINE_Y. OMITTED at settle
-  // (never scale(1)). CSS style.transform so getComputedStyle().transform returns a matrix the
+  // Baseline-anchored grow transform (§3 ruling 1): scale Y about the row-aware baseline. OMITTED at
+  // settle (never scale(1)). CSS style.transform so getComputedStyle().transform returns a matrix the
   // gate's parseMatrix reads.
-  const transform = settled ? undefined : `translate(0px, ${BASELINE_Y}px) scale(1, ${grow}) translate(0px, ${-BASELINE_Y}px)`;
+  const transform = settled ? undefined : `translate(0px, ${baselineY}px) scale(1, ${grow}) translate(0px, ${-baselineY}px)`;
   // Per-bin count label fades in as the bin finishes growing.
   const labelP = clamp01((t - (bin.binStart + 0.3)) / 0.12);
 
@@ -252,7 +280,7 @@ function HistBin({ bin, fill, t }: { bin: PlannedBin; fill: string; t: number })
 }
 
 // ── One stat marker: neutral dashed vertical line (draw-on) + a small label ─────────────────
-function Marker({ marker, index, reveal }: { marker: PlannedMarker; index: number; reveal: number }) {
+function Marker({ marker, index, reveal, plotY0, baselineY }: { marker: PlannedMarker; index: number; reveal: number; plotY0: number; baselineY: number }) {
   // Draw-on via pathLength=1 + strokeDashoffset=1−reveal (the scatter trend mechanism). The line
   // draws bottom→top is approximated by the dash reveal; fully drawn (offset 0) at t=1.
   return (
@@ -260,8 +288,8 @@ function Marker({ marker, index, reveal }: { marker: PlannedMarker; index: numbe
       <line
         x1={marker.xPx}
         x2={marker.xPx}
-        y1={BASELINE_Y}
-        y2={PLOT_Y0}
+        y1={baselineY}
+        y2={plotY0}
         stroke={MARKER_COLOR}
         strokeWidth={MARKER_STROKE}
         strokeLinecap="round"
@@ -275,7 +303,7 @@ function Marker({ marker, index, reveal }: { marker: PlannedMarker; index: numbe
       {marker.showLabel && (
         <text
           x={marker.anchor === "end" ? marker.xPx - 6 : marker.xPx + 6}
-          y={PLOT_Y0 - 6}
+          y={plotY0 - 6}
           textAnchor={marker.anchor}
           fill={colors.text.secondary}
           fontFamily="'JetBrains Mono', monospace"

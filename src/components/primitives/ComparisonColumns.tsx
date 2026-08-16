@@ -26,9 +26,10 @@
 // `clamp01` everywhere; the stagger is a pure function of ROW index, so the deepest row still
 // settles ≤ 0.85 (CC4/CC7).
 
-import type { CSSProperties } from "react";
+import { useContext, type CSSProperties } from "react";
 import { Check, AlertTriangle } from "lucide-react";
-import { colors, type AccentKey } from "@/tokens/design";
+import { colors, resolveFormat, type AccentKey } from "@/tokens/design";
+import { FormatContext } from "@/components/layout/formatContext";
 import { appear } from "@/lib/reveal";
 import { easings } from "@/tokens/motion";
 import { planNarrative, type NarrativePlan, COMPARISON_ITEM_CAP } from "@/lib/narrative";
@@ -140,7 +141,9 @@ function Column({
         )
       }
     >
-      <div className="relative flex flex-col gap-4">
+      {/* Emil's format-bench feedback: larger type + more generous horizontal rhythm (icon gap,
+          row spacing) so the list reads at feed size instead of floating small in a tall panel. */}
+      <div className="relative flex flex-col gap-5">
         {items.map((it, i) => {
           let style: CSSProperties;
           let iconScale: number;
@@ -173,20 +176,20 @@ function Column({
             style = itemStyle(t, start);
           }
           return (
-            <div key={i} data-cmp-item={i} className="flex items-start gap-3" style={style}>
+            <div key={i} data-cmp-item={i} className="flex items-start gap-4" style={style}>
               <span
                 data-cmp-icon
                 style={{
                   flexShrink: 0,
-                  marginTop: 2,
+                  marginTop: 3,
                   display: "inline-flex",
                   transformOrigin: "center",
                   ...(iconScale < 1 ? { transform: `scale(${iconScale})` } : {}),
                 }}
               >
-                <Icon size={28} color={c} />
+                <Icon size={30} color={c} />
               </span>
-              <span data-cmp-text className="text-text-primary" style={{ fontSize: 28, lineHeight: 1.25 }}>
+              <span data-cmp-text className="text-text-primary" style={{ fontSize: 31, lineHeight: 1.3 }}>
                 {it}
               </span>
             </div>
@@ -209,12 +212,24 @@ type Props = {
 };
 
 export function ComparisonColumns({ left, right, t = 1, revealMode = "paired", narrative }: Props) {
-  // ── DEFAULT (paired) — byte-identical early return to today's exact render path ───────────────
+  // 9:16 (Emil's format-bench feedback): the hug-centered pair floats small in the tall viz zone —
+  // scale the whole two-up UP (fonts + panels). CSS zoom CANCELS percentage widths (a % width
+  // renders at that % regardless of zoom — Chromium-verified), so `w-full` alone keeps the grid at
+  // exactly 100% of the zone while every absolute length inside scales 1.22×. Portrait/square
+  // byte-identical.
+  const isTall = resolveFormat(useContext(FormatContext)) === "vertical";
+  const midZoom = isTall ? { zoom: 1.22 } : undefined;
+  // ── DEFAULT (paired) — hug-and-center (Emil's format-bench feedback): the column boxes size to
+  // their CONTENT (the grid row = the taller column, so the pair stays a matched-height two-up) and
+  // the pair centers in the viz zone — no more row-tall panels with dead space above/below the
+  // items. The pl-1.5 baselines are captured against THIS intended layout.
   if (revealMode !== "sequential" && revealMode !== "sequentialCentered") {
     return (
-      <div className="grid h-full grid-cols-2 gap-6" data-cmp>
-        <Column col={left} good t={t} />
-        <Column col={right} good={false} t={t} />
+      <div className="flex h-full w-full items-center">
+        <div className="grid w-full grid-cols-2 gap-6" style={midZoom} data-cmp>
+          <Column col={left} good t={t} />
+          <Column col={right} good={false} t={t} />
+        </div>
       </div>
     );
   }
@@ -250,9 +265,11 @@ export function ComparisonColumns({ left, right, t = 1, revealMode = "paired", n
       settled,
     });
     return (
-      <div className="grid h-full grid-cols-2 gap-6" data-cmp data-cmp-sequential>
-        <Column col={left} good t={t} mode="sequential" seq={inPlaceSeq("left")} />
-        <Column col={right} good={false} t={t} mode="sequential" seq={inPlaceSeq("right")} />
+      <div className="flex h-full w-full items-center">
+        <div className="grid w-full grid-cols-2 gap-6" style={midZoom} data-cmp data-cmp-sequential>
+          <Column col={left} good t={t} mode="sequential" seq={inPlaceSeq("left")} />
+          <Column col={right} good={false} t={t} mode="sequential" seq={inPlaceSeq("right")} />
+        </div>
       </div>
     );
   }
@@ -300,7 +317,8 @@ export function ComparisonColumns({ left, right, t = 1, revealMode = "paired", n
   else { rightPos = lerp(CENTER_R, SEAT, assembleEased); rightOpacity = 1; }
 
   return (
-    <div className="grid h-full grid-cols-2 gap-6" data-cmp data-cmp-sequential-centered>
+    <div className="flex h-full w-full items-center">
+    <div className="grid w-full grid-cols-2 gap-6" style={midZoom} data-cmp data-cmp-sequential-centered>
       <Column
         col={left}
         good
@@ -329,6 +347,7 @@ export function ComparisonColumns({ left, right, t = 1, revealMode = "paired", n
           settled,
         }}
       />
+    </div>
     </div>
   );
 }

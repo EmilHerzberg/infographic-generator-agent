@@ -42,6 +42,7 @@ import type { CSSProperties, ReactNode } from "react";
 import { colors, text as textScale } from "@/tokens/design";
 import { easings } from "@/tokens/motion";
 import { planNarrative, type NarrativePlan } from "@/lib/narrative";
+import { appear } from "@/lib/reveal";
 
 export type ClaimEntry = {
   id: string;
@@ -97,14 +98,28 @@ function staggerForN(n: number): number {
 // as stagger (full-width claim, RC7) — Emil's "the crossing out didn't work" on the centered card is
 // gone because we're back to the in-place stacked card. Final frame == stagger (N3 thumbnail-clean).
 
-export function ClaimList({ entries, entriesReveal = 1, dim = 1, revealMode = "stagger", t = 1, narrative }: Props) {
+export function ClaimList({
+  entries,
+  entriesReveal: entriesRevealProp,
+  dim = 1,
+  revealMode = "stagger",
+  t = 1,
+  narrative,
+}: Props) {
+  // Strategy A t-fallback: an omitted reveal prop derives from the global t via the SAME
+  // appear(t,start,dur) schedule PostRenderer passes explicitly; explicit props override
+  // (byte-identical for Path A), and at the default t=1 every fallback is exactly 1
+  // (settled — backward compatible).
+  const entriesReveal = entriesRevealProp ?? appear(t, 0.2, 0.55);
   const n = entries.length;
 
   // ── DEFAULT (stagger) — byte-identical early return to today's exact render path ──────────────
   if (revealMode !== "spotlight") {
     const step = staggerForN(n);
+    // h-full + justify-center: in a stretched viz box the ledger CENTERS instead of pinning to
+    // the top with dead space below (Emil's format-bench feedback); no-op in hug contexts.
     return (
-      <div className="flex flex-col gap-3" data-claim-list>
+      <div className="flex h-full flex-col justify-center gap-3" data-claim-list>
         {entries.map((e, i) => {
           // Each entry's own 0..1 progress: starts at i·step, lasts ENTRY_DUR.
           const entryP = clamp01((entriesReveal - i * step) / ENTRY_DUR);
@@ -127,7 +142,7 @@ export function ClaimList({ entries, entriesReveal = 1, dim = 1, revealMode = "s
     );
   const settled = t >= plan.assembly.endT;
   return (
-    <div className="flex flex-col gap-3" data-claim-list data-claim-spotlight>
+    <div className="flex h-full flex-col justify-center gap-3" data-claim-list data-claim-spotlight>
       {entries.map((e, i) => {
         const w = plan.windows[i];
         // No window (over the cap) → fully revealed (final-frame safe).

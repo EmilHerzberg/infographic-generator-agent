@@ -1,5 +1,7 @@
 // Path A render contract. A model emits a RenderPost (validated JSON); PostRenderer
 // turns it into pixels via the fixed primitives — no AI-written code. See docs/SHIP_PLAN.md.
+import type { FormatKey } from "@/tokens/design";
+
 export type Accent = "cyan" | "amber" | "violet" | "mint" | "burnt";
 
 // PL-4.2 `deltaTrend`: colors the EXISTING delta text by author-stated trend (up → successMint,
@@ -297,4 +299,7 @@ export type RenderPost = {
   metrics?: RenderMetric[];
   takeaway?: string;
   signal?: string;
+  // Output aspect. NOT model-authored — the pipeline stamps it from the user's choice AFTER generation,
+  // so it never enters the (grammar-budgeted) generation schema. Absent → portrait (byte-identical to today).
+  format?: FormatKey;
 };

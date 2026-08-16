@@ -14,9 +14,10 @@
 // (do not hand-roll fit). Empty-state = caption-only Panel — no "no data" text (§3 ruling 3).
 // Spec: planning/primitive-library/handoffs/PL-3.2-tiered-ranked.md §2.5.
 
-import { useId } from "react";
+import { useContext, useId } from "react";
 import type { Accent } from "@/posts/renderTypes";
-import { colors } from "@/tokens/design";
+import { colors, resolveFormat } from "@/tokens/design";
+import { FormatContext } from "@/components/layout/formatContext";
 import { FitLine } from "@/components/primitives/FitLine";
 import {
   planTiers,
@@ -54,9 +55,33 @@ type Props = {
   t?: number;
 };
 
+// Taller-frame spread (Emil's format-bench feedback): on 4:5/9:16 the stack opens its vertical
+// rhythm (band gaps, band padding, chip height) to USE the extra frame height instead of clustering
+// mid-zone. Square keeps today's values byte-identically.
+type Spread = {
+  stackGap: number;
+  tierPadY: number;
+  tierMinH: number;
+  rowGap: number;
+  chipMinH: number;
+  /** Adaptive density (Emil): narrower pack width → fewer, WIDER chips per row on tall formats. */
+  packWidth?: number;
+  twoRowQuota?: number;
+  /** Scale-up of the whole stack (fonts + boxes) — width-compensated so it still fits the track. */
+  zoom: number;
+  chipGrow: boolean;
+};
+const SPREADS: Record<"base" | "portrait" | "vertical", Spread> = {
+  base: { stackGap: 24, tierPadY: 12, tierMinH: 96, rowGap: 16, chipMinH: 56, zoom: 1, chipGrow: false },
+  portrait: { stackGap: 36, tierPadY: 16, tierMinH: 110, rowGap: 20, chipMinH: 62, packWidth: 680, twoRowQuota: 3, zoom: 1.05, chipGrow: true },
+  vertical: { stackGap: 56, tierPadY: 24, tierMinH: 128, rowGap: 24, chipMinH: 70, packWidth: 560, twoRowQuota: 3, zoom: 1.12, chipGrow: true },
+};
+
 export function TierStack({ tiers, mode = "tiers", showValue = false, t = 1 }: Props) {
   const uid = useId();
-  const plan = planTiers(tiers, mode);
+  const fmt = resolveFormat(useContext(FormatContext));
+  const spread = SPREADS[fmt === "vertical" ? "vertical" : fmt === "portrait" ? "portrait" : "base"];
+  const plan = planTiers(tiers, mode, spread.packWidth != null ? { packWidth: spread.packWidth, twoRowQuota: spread.twoRowQuota } : undefined);
 
   // Empty-state (§3 ruling 3): the Panel renders with its caption only — NO "no data" text. The
   // PostRenderer wraps us in a captioned Panel, so here we simply render an empty stack.
@@ -77,16 +102,18 @@ export function TierStack({ tiers, mode = "tiers", showValue = false, t = 1 }: P
     // the chips' FitLine + flex-shrink then absorb any residual within the capped track. Covers BOTH
     // modes and a pathologically long tier/ranked label, not just the measured chip-row case.
     <div
-      className="flex h-full w-full min-w-0 flex-col justify-center gap-6"
-      style={{ maxWidth: TRACK_WIDTH }}
+      className="flex h-full w-full min-w-0 flex-col justify-center"
+      // zoom scales the whole stack up (fonts + chips); maxWidth divides by it so the RENDERED
+      // width stays exactly the design track (zoomed layout px × zoom = track px).
+      style={{ maxWidth: TRACK_WIDTH / spread.zoom, rowGap: spread.stackGap, ...(spread.zoom !== 1 ? { zoom: spread.zoom } : {}) }}
       data-tiers
       data-tiers-mode={plan.mode}
     >
       {plan.tiers.map((tier, i) =>
         plan.mode === "ranked" ? (
-          <RankedTier key={`${uid}-t${i}`} tier={tier} index={i} t={t} showValue={showValue} />
+          <RankedTier key={`${uid}-t${i}`} tier={tier} index={i} t={t} showValue={showValue} spread={spread} />
         ) : (
-          <Tier key={`${uid}-t${i}`} tier={tier} index={i} t={t} />
+          <Tier key={`${uid}-t${i}`} tier={tier} index={i} t={t} spread={spread} />
         ),
       )}
     </div>
@@ -94,7 +121,7 @@ export function TierStack({ tiers, mode = "tiers", showValue = false, t = 1 }: P
 }
 
 // ── Tiers mode ──────────────────────────────────────────────────────────────────────────────
-function Tier({ tier, index, t }: { tier: PlannedTier; index: number; t: number }) {
+function Tier({ tier, index, t, spread }: { tier: PlannedTier; index: number; t: number; spread: Spread }) {
   const hex = accentHex(tier.accentKey);
   const bandStart = tierBandStart(index);
   const bandOn = clamp01((t - bandStart) / BAND_DUR);
@@ -105,8 +132,8 @@ function Tier({ tier, index, t }: { tier: PlannedTier; index: number; t: number 
 
   return (
     <div
-      className="relative flex min-w-0 flex-col justify-center gap-2 px-5 py-3"
-      style={{ minHeight: 96 }}
+      className="relative flex min-w-0 flex-col justify-center gap-2 px-5"
+      style={{ minHeight: spread.tierMinH, paddingTop: spread.tierPadY, paddingBottom: spread.tierPadY }}
       data-tier={index}
     >
       {/* Band — absolute inset:0 so it can NEVER affect layout (PL-1.3 fill discipline). Colored
@@ -141,14 +168,14 @@ function Tier({ tier, index, t }: { tier: PlannedTier; index: number; t: number 
 
       {/* Chip rows — deterministic planTiers bin-pack (≤2 rows). gap 16px between chips/rows.
           min-w-0 on the column + each row so chips can shrink to the real width (PL-5.2). */}
-      <div className="relative flex min-w-0 flex-col gap-4">
+      <div className="relative flex min-w-0 flex-col" style={{ rowGap: spread.rowGap }}>
         {tier.rows.map((row, ri) => (
           <div key={ri} className="flex min-w-0 flex-row gap-4">
             {row.map((chip, ci) => {
               const j = chipIdx++;
               const start = chipStart(index, j);
               const on = clamp01((t - start) / CHIP_DUR);
-              return <Chip key={ci} chip={chip} on={on} accentHex={hex} />;
+              return <Chip key={ci} chip={chip} on={on} accentHex={hex} minH={spread.chipMinH} grow={spread.chipGrow} />;
             })}
           </div>
         ))}
@@ -157,17 +184,21 @@ function Tier({ tier, index, t }: { tier: PlannedTier; index: number; t: number 
   );
 }
 
-function Chip({ chip, on, accentHex: hex }: { chip: PlannedChip; on: number; accentHex: string }) {
+function Chip({ chip, on, accentHex: hex, minH, grow }: { chip: PlannedChip; on: number; accentHex: string; minH: number; grow: boolean }) {
   const settled = on >= 1;
   return (
     <div
       className="flex min-w-0 items-center rounded-[10px]"
       style={{
         minWidth: CHIP_MIN_WIDTH,
-        minHeight: 56,
+        minHeight: minH,
+        // Adaptive density: on tall formats the (fewer) chips GROW to share the full row width.
+        ...(grow ? { flexGrow: 1 } : {}),
         padding: "0 20px",
-        backgroundColor: colors.bg.softPanel,
-        boxShadow: `inset 0 0 0 1px ${rgba(hex, 0.22)}`,
+        // Chip readability (Emil's format-bench feedback): a deeper fill + stronger ring separates
+        // the chip from the tinted band it sits on, so the label reads at feed size.
+        backgroundColor: colors.bg.deepInk,
+        boxShadow: `inset 0 0 0 1px ${rgba(hex, 0.38)}`,
         opacity: on,
         ...(settled ? {} : { transform: `translateY(${(1 - on) * 8}px)` }),
       }}
@@ -192,14 +223,16 @@ function RankedTier({
   index,
   t,
   showValue,
+  spread,
 }: {
   tier: PlannedTier;
   index: number;
   t: number;
   showValue: boolean;
+  spread: Spread;
 }) {
   return (
-    <div className="relative flex flex-col gap-3" data-tier={index}>
+    <div className="relative flex flex-col" style={{ rowGap: Math.max(12, spread.rowGap - 4) }} data-tier={index}>
       {tier.rows.map((row, ri) => {
         const chip = row[0];
         if (!chip) return null;
@@ -211,7 +244,7 @@ function RankedTier({
             key={ri}
             className="flex items-center gap-4 rounded-[10px] px-5"
             style={{
-              minHeight: 56,
+              minHeight: spread.chipMinH,
               backgroundColor: colors.bg.softPanel,
               boxShadow: `inset 0 0 0 1px ${rgba(colors.accent.cyan, 0.18)}`,
               opacity: on,

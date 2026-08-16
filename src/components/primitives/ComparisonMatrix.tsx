@@ -17,9 +17,12 @@
 // Animation drivers per cell: tlReveal / trReveal / blReveal / brReveal (0..1).
 // focusOn cell + focusLockOpacity dims non-focused cells (C8).
 
+import { useContext } from "react";
 import type { AccentKey } from "@/content/schema";
-import { colors, text as textScale } from "@/tokens/design";
+import { colors, text as textScale, resolveFormat } from "@/tokens/design";
+import { FormatContext } from "@/components/layout/formatContext";
 import { cellDim as planCellDim, planMatrix, type MatrixAccent } from "@/lib/matrix";
+import { appear } from "@/lib/reveal";
 import { FitLine } from "./FitLine";
 
 const accentColorMap: Record<AccentKey, string> = {
@@ -63,6 +66,8 @@ type Props = {
   focusOn?: FocusKey;
   /** opacity of non-focused cells during focus lock (typically 0.7) */
   focusLockOpacity?: number;
+  /** Global progress 0..1 — fills any OMITTED reveal prop via the standard schedule (so Path B can just pass t). Explicit props win. */
+  t?: number;
 };
 
 export function ComparisonMatrix({
@@ -73,15 +78,25 @@ export function ComparisonMatrix({
   tr,
   bl,
   br,
-  headersReveal = 1,
-  tlReveal = 1,
-  trReveal = 1,
-  blReveal = 1,
-  brReveal = 1,
+  headersReveal: headersRevealProp,
+  tlReveal: tlRevealProp,
+  trReveal: trRevealProp,
+  blReveal: blRevealProp,
+  brReveal: brRevealProp,
+  t = 1,
   highlightCell = "bl",
   focusOn = null,
   focusLockOpacity = 1,
 }: Props) {
+  // Strategy A t-fallback: an omitted reveal prop derives from the global t via the SAME
+  // appear(t,start,dur) schedule PostRenderer passes explicitly; explicit props override
+  // (byte-identical for Path A), and at the default t=1 every fallback is exactly 1 (settled —
+  // backward compatible).
+  const headersReveal = headersRevealProp ?? appear(t, 0.18, 0.2);
+  const tlReveal = tlRevealProp ?? appear(t, 0.3, 0.18);
+  const trReveal = trRevealProp ?? appear(t, 0.42, 0.18);
+  const blReveal = blRevealProp ?? appear(t, 0.54, 0.18);
+  const brReveal = brRevealProp ?? appear(t, 0.66, 0.18);
   // The pure brain resolves cell content, accents, the delta fit-or-hide decision (C6) and the
   // highlight key (C8). It is byte-identical to the legacy inline resolution on in-spec input.
   const plan = planMatrix({ rowHeaders, colHeaders, rowAccents, tl, tr, bl, br, highlightCell });
@@ -92,10 +107,22 @@ export function ComparisonMatrix({
   // display font in an auto-width grid) can't expand the tracks past the content column and cascade a
   // right-margin breach onto every sibling (eyebrow/headline/takeaway). No-op when the grid already
   // fits — FitLine then shrinks the value within the capped column. (PL-5.2 honest-factor repro.)
+  // Vertical opens the gaps (Emil: more generous mid-section spacing on tall formats) — portrait/
+  // square stay byte-identical (the pl-4.3 baselines are captured at portrait). NOTE deliberately NO
+  // `w-full` here: in Path A Panel contexts the auto-width grid wraps cells differently when force-
+  // stretched (breaks the byte-identical baseline); a Path B wrapper that wants full width gives its
+  // OWN container the width (see the 11-matrix bench components).
+  const isVertical = resolveFormat(useContext(FormatContext)) === "vertical";
   return (
     <div
       data-matrix
-      className="grid max-w-full grid-cols-[150px_minmax(0,1fr)_minmax(0,1fr)] grid-rows-[auto_1fr_1fr] gap-x-4 gap-y-4"
+      className={`grid max-w-full grid-cols-[150px_minmax(0,1fr)_minmax(0,1fr)] grid-rows-[auto_1fr_1fr] ${
+        isVertical ? "gap-x-7 gap-y-7" : "gap-x-4 gap-y-4"
+      }`}
+      // 9:16 (Emil): scale the whole matrix UP so the 2×2 dominates the tall viz zone. CSS zoom
+      // CANCELS percentage widths, so width:100% renders at the full zone width while absolute
+      // lengths (fonts, gaps, the 150px header column) scale 1.15×. Portrait/square untouched.
+      style={isVertical ? { zoom: 1.15, width: "100%" } : undefined}
     >
       <div data-matrix-cell="spacer" />
       <ColHeader text={plan.colHeaders[0]} reveal={headersReveal} />

@@ -16,7 +16,7 @@ const REGISTRY = {
   },
   gemini: {
     envKey: "GEMINI_API_KEY",
-    defaultModel: "gemini-2.5-pro", // frontier tier (was -flash); override with GEMINI_MODEL for cheap/fast
+    defaultModel: "gemini-3.1-pro-preview", // 2.5-pro removed: writes crash-grade component code (see models-catalog); override with GEMINI_MODEL
     make: ({ apiKey, baseURL }) => createGoogleGenerativeAI({ apiKey, ...(baseURL ? { baseURL } : {}) }),
   },
   deepseek: {
@@ -41,7 +41,7 @@ const REGISTRY = {
   // envKey omitted: the make() validates its own (two-mode) credentials.
   vertex: {
     envKey: null,
-    defaultModel: "gemini-2.5-pro",
+    defaultModel: "gemini-3.1-pro-preview",
     make: () => {
       if (process.env.GOOGLE_VERTEX_API_KEY) {
         return createVertex({ apiKey: process.env.GOOGLE_VERTEX_API_KEY });
@@ -60,6 +60,37 @@ const REGISTRY = {
     },
   },
 };
+
+// ── Client-side LLM timeouts (2026-07 timeout audit) ─────────────────────────────────────────────
+// No provider client configures a timeout, so every call used to ride Node/undici defaults — 300s to
+// headers, and a TRICKLING stream could extend forever (the body timeout resets per chunk). The
+// server's isolated-gen container cap (480s) backstopped the studio, but local CLI/bench calls were
+// unbounded: one wedged provider call could hang a gen slot indefinitely. Every generateText /
+// generateObject call now passes an AbortSignal:
+//   • single-shot structured calls (concierge / judge / triage / guard / Path A spec) →
+//     LLM_TIMEOUT_MS, default 300s — generous for reasoning models, finite always.
+//   • the multi-step Path B agent loop (generateText, up to 32 steps) → GEN_LOOP_TIMEOUT_MS,
+//     default 25 min for the WHOLE loop (legit funnel cells have run 11 min; the signal spans
+//     retries too, so it must dominate the slowest honest run).
+export const LLM_TIMEOUT_MS = Number(process.env.LLM_TIMEOUT_MS) || 300000;
+export const GEN_LOOP_TIMEOUT_MS = Number(process.env.GEN_LOOP_TIMEOUT_MS) || 1500000;
+
+/** AbortSignal for a single-shot LLM call. */
+export function llmCallSignal(ms = LLM_TIMEOUT_MS) {
+  return AbortSignal.timeout(ms);
+}
+
+/** AbortSignal for a whole multi-step agent loop. */
+export function genLoopSignal(ms = GEN_LOOP_TIMEOUT_MS) {
+  return AbortSignal.timeout(ms);
+}
+
+/** True when an error came from OUR timeout signal (AI SDK surfaces AbortError/TimeoutError).
+ *  Deliberately identity-based, NOT message-based: a provider's own "504 gateway timeout" at t=30s
+ *  must not be relabeled as our whole-loop cap (wrong duration + wrong debugging direction). */
+export function isLlmTimeout(e) {
+  return !!e && (e.name === "TimeoutError" || e.name === "AbortError");
+}
 
 export function providerNames() {
   return Object.keys(REGISTRY);

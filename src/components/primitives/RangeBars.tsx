@@ -20,10 +20,12 @@
 //   axis tick labels:    x 320  y 240   w 660 h  24
 // Spacing minimums: ≥40px between text and visual; ≥24px between row labels.
 
-import { useId } from "react";
+import { useContext, useId } from "react";
 import type { AccentKey } from "@/content/schema";
-import { colors, text } from "@/tokens/design";
+import { colors, text, chartVScale } from "@/tokens/design";
+import { FormatContext } from "@/components/layout/formatContext";
 import { planRanges, laneItemOpacity, clampTickLabelX, type RangesPlanEntry } from "@/lib/ranges";
+import { appear } from "@/lib/reveal";
 
 const accentToColor: Record<AccentKey, string> = {
   cyan: colors.accent.cyan,
@@ -55,6 +57,8 @@ type Props = {
   topLaneReveal?: number;
   bottomLaneReveal?: number;
   marketLineReveal?: number;
+  /** Global progress 0..1 — fills any OMITTED reveal prop via the standard schedule (so Path B can just pass t). Explicit props win. */
+  t?: number;
   caption?: string;
 };
 
@@ -68,15 +72,25 @@ export function RangeBars({
   minYear,
   maxYear,
   marketLine,
-  axisReveal = 1,
-  topLaneReveal = 1,
-  bottomLaneReveal = 1,
-  marketLineReveal = 1,
+  axisReveal: axisRevealProp,
+  topLaneReveal: topLaneRevealProp,
+  bottomLaneReveal: bottomLaneRevealProp,
+  marketLineReveal: marketLineRevealProp,
+  t = 1,
   caption,
 }: Props) {
+  // Strategy A t-fallback: an omitted reveal prop derives from the global t via the SAME appear(t,start,dur) schedule PostRenderer passes explicitly; explicit props override (byte-identical for Path A), and at the default t=1 every fallback is exactly 1 (settled — backward compatible).
+  const axisReveal = axisRevealProp ?? appear(t, 0.3, 0.3);
+  const topLaneReveal = topLaneRevealProp ?? appear(t, 0.2, 0.5);
+  const bottomLaneReveal = bottomLaneRevealProp ?? appear(t, 0.45, 0.5);
+  const marketLineReveal = marketLineRevealProp ?? appear(t, 0.72, 0.28);
+
   const uid = useId();
 
   // The pure brain — all geometry/clamps/scale/label-fit decided ONCE, from DATA only (never reveal).
+  // Vertical-fill (Emil's format-bench feedback): stretch the two-lane geometry + scale type on the
+  // tall aspect so the block differs per format instead of rendering identically everywhere.
+  const vScale = chartVScale(useContext(FormatContext));
   const plan = planRanges({
     topGroupLabel,
     bottomGroupLabel,
@@ -87,12 +101,15 @@ export function RangeBars({
     minYear,
     maxYear,
     marketLine,
+    vScale,
   });
+  const G = plan.vgeom;
 
   const width = 1000;
-  const height = 560;
-  const barHeight = 32;
-  const axisY = 220;
+  const height = G.VIEW_H;
+  const barHeight = G.BAR_HEIGHT;
+  const axisY = G.AXIS_Y;
+  const fs = G.fontScale;
 
   const topColor = accentToColor[plan.topAccent];
   const bottomColor = accentToColor[plan.bottomAccent];
@@ -116,7 +133,7 @@ export function RangeBars({
               textAnchor="end"
               fill={colors.text.primary}
               fontFamily="'Space Grotesk', sans-serif"
-              fontSize={22}
+              fontSize={22 * fs}
               fontWeight={500}
             >
               {e.label}
@@ -139,7 +156,7 @@ export function RangeBars({
               y={e.labelY}
               fill={color}
               fontFamily="'Space Grotesk', sans-serif"
-              fontSize={22}
+              fontSize={22 * fs}
               fontWeight={600}
             >
               +
@@ -162,10 +179,10 @@ export function RangeBars({
       <text
         data-ranges-grouplabel="top"
         x={20}
-        y={40}
+        y={G.TOP_LABEL_Y}
         fill={topColor}
         fontFamily="'JetBrains Mono', monospace"
-        fontSize={text.eyebrow}
+        fontSize={text.eyebrow * fs}
         fontWeight={600}
         letterSpacing="0.22em"
       >
@@ -199,12 +216,12 @@ export function RangeBars({
                 strokeWidth={1.5}
               />
               <text
-                x={clampTickLabelX(t, plan.yearToX, String(t))}
+                x={clampTickLabelX(t, plan.yearToX, String(t), fs)}
                 y={axisY + 28}
                 textAnchor="middle"
                 fill={colors.text.tertiary}
                 fontFamily="'JetBrains Mono', monospace"
-                fontSize={text.axisLabel}
+                fontSize={text.axisLabel * fs}
                 letterSpacing="0.14em"
               >
                 {t}
@@ -218,10 +235,10 @@ export function RangeBars({
       <text
         data-ranges-grouplabel="bottom"
         x={20}
-        y={285}
+        y={G.BOTTOM_LABEL_Y}
         fill={bottomColor}
         fontFamily="'JetBrains Mono', monospace"
-        fontSize={text.eyebrow}
+        fontSize={text.eyebrow * fs}
         fontWeight={600}
         letterSpacing="0.22em"
       >
@@ -234,12 +251,14 @@ export function RangeBars({
       {/* Market consensus line (violet, dashed, full height) */}
       {plan.marketLine && (
         <g opacity={marketLineReveal} data-ranges-group="marketLine">
+          {/* Line + label ys ride the vScale geometry: the label block sits BELOW the stretched
+              bottom lane (it collided with the lane bars when only the lanes scaled). */}
           <line
             data-ranges-marketline=""
             x1={plan.marketLine.x}
             x2={plan.marketLine.x}
-            y1={20}
-            y2={460}
+            y1={Math.round(20 * (G.VIEW_H / 560))}
+            y2={Math.round(460 * (G.VIEW_H / 560))}
             stroke={violetColor}
             strokeWidth={2}
             strokeDasharray="6 6"
@@ -249,10 +268,10 @@ export function RangeBars({
           <text
             x={plan.marketLine.labelX}
             textAnchor={plan.marketLine.labelAnchor}
-            y={490}
+            y={Math.round(490 * (G.VIEW_H / 560))}
             fill={violetColor}
             fontFamily="'JetBrains Mono', monospace"
-            fontSize={text.axisLabel}
+            fontSize={text.axisLabel * fs}
             fontWeight={600}
             letterSpacing="0.18em"
           >
@@ -261,10 +280,10 @@ export function RangeBars({
           <text
             x={plan.marketLine.labelX}
             textAnchor={plan.marketLine.labelAnchor}
-            y={518}
+            y={Math.round(518 * (G.VIEW_H / 560))}
             fill={colors.text.secondary}
             fontFamily="'JetBrains Mono', monospace"
-            fontSize={20}
+            fontSize={20 * fs}
             letterSpacing="0.12em"
           >
             {plan.marketLine.year}

@@ -173,7 +173,20 @@ export type PlanBarsInput = {
   axisMax?: number;
   unit?: string;
   referenceLine?: ReferenceLineInput;
+  /** Vertical-fill scale (Emil's 9:16 feedback). Multiplies EVERY plot y-coordinate + the viewBox height so
+   *  the bars/spacing fill the tall frame. Default 1 ⇒ portrait/square geometry byte-identical (the checks
+   *  never pass it). See `chartVScale` in tokens/design. */
+  vScale?: number;
 };
+
+// Format-scaled vertical geometry: every plot y-coordinate + the viewBox height multiplied by `vScale`
+// (1 = the source 640-tall reference). The component MUST derive its own axis/label y-positions from the
+// SAME helper so the render matches the plan. x-geometry (bands, horizontal growth) is untouched.
+export type BarsVGeom = { VIEW_H: number; PLOT_Y0: number; BASELINE_Y: number; CAT_LABEL_Y: number; PLOT_Y0_H: number; PLOT_Y1_H: number };
+export function barsVGeom(vScale = 1): BarsVGeom {
+  const s = Number.isFinite(vScale) && vScale > 0 ? vScale : 1;
+  return { VIEW_H: Math.round(VIEW_H * s), PLOT_Y0: PLOT_Y0 * s, BASELINE_Y: BASELINE_Y * s, CAT_LABEL_Y: CAT_LABEL_Y * s, PLOT_Y0_H: PLOT_Y0_H * s, PLOT_Y1_H: PLOT_Y1_H * s };
+}
 
 /** Pure stagger-vs-N (§2.5): the last bar must finish growing by the 0.85 settle deadline. */
 export function staggerForN(n: number): number {
@@ -350,12 +363,16 @@ export function planBars(input: PlanBarsInput): BarsPlan {
   for (let i = 0; i <= TICK_COUNT; i++) ticks.push(axisMin + ((axisMax - axisMin) * i) / TICK_COUNT);
 
   // 7. Build scales. Category band over the cross axis; value (linear) over the growth axis.
+  // Vertical-fill: every plot y-coordinate is scaled by vScale (default 1 → byte-identical). For VERTICAL
+  // bars that stretches the growth axis (taller bars); for HORIZONTAL bars it stretches the cross axis (more
+  // row spacing) — exactly the two things Emil asked for on 9:16.
+  const V = barsVGeom(input.vScale);
   const isV = orientation === "vertical";
   const plotX0 = isV ? PLOT_X0_V : PLOT_X0_H;
   const plotX1 = isV ? PLOT_X1_V : PLOT_X1_H;
-  const crossLo = isV ? plotX0 : PLOT_Y0_H;
-  const crossHi = isV ? plotX1 : PLOT_Y1_H;
-  const growLen = isV ? BASELINE_Y - PLOT_Y0 : plotX1 - plotX0; // value-axis pixel span
+  const crossLo = isV ? plotX0 : V.PLOT_Y0_H;
+  const crossHi = isV ? plotX1 : V.PLOT_Y1_H;
+  const growLen = isV ? V.BASELINE_Y - V.PLOT_Y0 : plotX1 - plotX0; // value-axis pixel span
   const value = scaleLinear().domain([axisMin, axisMax]).range([0, growLen]);
   // Painted length of a single bar from the baseline (C5 out-of-axis clamp: never exits the plot).
   const barLen = (v: number) => clamp(value(clamp(v, axisMin, axisMax)) ?? 0, 0, growLen);
@@ -399,7 +416,7 @@ export function planBars(input: PlanBarsInput): BarsPlan {
         const h = segEnd - segStart;
         cursor += floored[si];
         const accentKey = accentForIndex(Array.isArray(input.seriesAccents) ? input.seriesAccents[si] : undefined, si);
-        rects.push(buildRect({ isV, bandStart, bw, growLen, lengthPx: h, offsetPx: segStart, accentKey, value: v, seriesIndex: si }));
+        rects.push(buildRect({ isV, bandStart, bw, growLen, lengthPx: h, offsetPx: segStart, baselineY: V.BASELINE_Y, accentKey, value: v, seriesIndex: si }));
         rects[si].segStart = segStart;
         rects[si].segEnd = segEnd;
       });
@@ -409,18 +426,18 @@ export function planBars(input: PlanBarsInput): BarsPlan {
         const subOff = subBand!(si) ?? 0;
         const subW = subBand!.bandwidth();
         const accentKey = seriesAccents[si] ?? accentForIndex(undefined, si);
-        rects.push(buildRect({ isV, bandStart: bandStart + subOff, bw: subW, growLen, lengthPx: len, offsetPx: 0, accentKey, value: v, seriesIndex: si }));
+        rects.push(buildRect({ isV, bandStart: bandStart + subOff, bw: subW, growLen, lengthPx: len, offsetPx: 0, baselineY: V.BASELINE_Y, accentKey, value: v, seriesIndex: si }));
       });
     } else {
       const v = c.values[0] ?? 0;
       const len = barLen(v);
       const accentKey = accentForIndex(c.accent, ci);
-      rects.push(buildRect({ isV, bandStart, bw, growLen, lengthPx: len, offsetPx: 0, accentKey, value: v, seriesIndex: 0 }));
+      rects.push(buildRect({ isV, bandStart, bw, growLen, lengthPx: len, offsetPx: 0, baselineY: V.BASELINE_Y, accentKey, value: v, seriesIndex: 0 }));
     }
 
     // Value-label placement + fit-or-hide per rect.
     for (const r of rects) {
-      decideValueLabel(r, { isV, valueLabels, unit, customText: mode === "simple" ? c.valueText : undefined, plotX1, growLen });
+      decideValueLabel(r, { isV, valueLabels, unit, customText: mode === "simple" ? c.valueText : undefined, plotX1, growLen, plotY0: V.PLOT_Y0 });
       if (!r.showValue && r.valueHideReason && r.valueHideReason !== "off") dropped.hiddenLabels++;
     }
 
@@ -443,7 +460,7 @@ export function planBars(input: PlanBarsInput): BarsPlan {
   const valueLabelBoxes = bars.flatMap((b) =>
     b.rects.map((r) => valueLabelBox(r, isV)).filter((box): box is Box => box !== null),
   );
-  const referenceLine = planReferenceLine(input.referenceLine, { isV, barLen, plotX0, plotX1, valueLabelBoxes });
+  const referenceLine = planReferenceLine(input.referenceLine, { isV, barLen, plotX0, plotX1, valueLabelBoxes, baselineY: V.BASELINE_Y, plotY0: V.PLOT_Y0, plotY0H: V.PLOT_Y0_H, plotY1H: V.PLOT_Y1_H });
 
   return {
     mode, orientation, axisMin, axisMax, ticks, bars, seriesLabels, seriesAccents, unit, valueLabels, referenceLine,
@@ -478,31 +495,31 @@ function valueLabelBox(r: PlannedRect, isV: boolean): Box | null {
  *  line). `barLen` REUSES the bars' out-of-axis clamp, so lenPx ∈ [0, growLen] — never exits the band. */
 function planReferenceLine(
   input: ReferenceLineInput | undefined,
-  ctx: { isV: boolean; barLen: (v: number) => number; plotX0: number; plotX1: number; valueLabelBoxes: Box[] },
+  ctx: { isV: boolean; barLen: (v: number) => number; plotX0: number; plotX1: number; valueLabelBoxes: Box[]; baselineY: number; plotY0: number; plotY0H: number; plotY1H: number },
 ): PlannedReferenceLine | null {
   if (!input || !isNum(input.value)) return null;
-  const { isV, barLen, plotX0, plotX1, valueLabelBoxes } = ctx;
+  const { isV, barLen, plotX0, plotX1, valueLabelBoxes, baselineY, plotY0, plotY0H, plotY1H } = ctx;
   const value = input.value;
   const lenPx = barLen(value); // value(clamp(value, axisMin, axisMax)) — clamped into the plot band
 
   let x1: number, y1: number, x2: number, y2: number, labelX: number, labelY: number;
   if (isV) {
-    const yRef = BASELINE_Y - lenPx; // horizontal line at the value
+    const yRef = baselineY - lenPx; // horizontal line at the value
     x1 = plotX0;
     x2 = plotX1;
     y1 = yRef;
     y2 = yRef;
     labelX = plotX1; // right-anchored at the line's right end
     labelY = yRef - 8; // just above the line…
-    if (labelY - REF_LABEL_PX < PLOT_Y0) labelY = yRef + REF_LABEL_PX + 6; // …flip below if it'd exit the top
+    if (labelY - REF_LABEL_PX < plotY0) labelY = yRef + REF_LABEL_PX + 6; // …flip below if it'd exit the top
   } else {
     const xRef = PLOT_X0_H + lenPx; // vertical line at the value
     x1 = xRef;
     x2 = xRef;
-    y1 = PLOT_Y0_H;
-    y2 = PLOT_Y1_H;
+    y1 = plotY0H;
+    y2 = plotY1H;
     labelX = xRef; // right-anchored at the line top
-    labelY = PLOT_Y0_H - 8;
+    labelY = plotY0H - 8;
   }
 
   const label = typeof input.label === "string" ? input.label.trim() : "";
@@ -564,16 +581,17 @@ function buildRect(args: {
   growLen: number;
   lengthPx: number; // painted extent along the growth axis
   offsetPx: number; // offset from the baseline (stacked segment start)
+  baselineY: number; // vertical growth baseline (BASELINE_Y × vScale)
   accentKey: AccentKey;
   value: number;
   seriesIndex: number;
 }): PlannedRect {
-  const { isV, bandStart, bw, lengthPx, offsetPx, accentKey, value, seriesIndex } = args;
+  const { isV, bandStart, bw, lengthPx, offsetPx, baselineY, accentKey, value, seriesIndex } = args;
   if (isV) {
-    // vertical: x = band, width = bw; bar grows UP from BASELINE_Y. y = baseline − offset − length.
+    // vertical: x = band, width = bw; bar grows UP from the baseline. y = baseline − offset − length.
     return {
       x: bandStart,
-      y: BASELINE_Y - offsetPx - lengthPx,
+      y: baselineY - offsetPx - lengthPx,
       w: bw,
       h: lengthPx,
       accentKey, value, valueText: "", showValue: false, valuePlacement: "end", seriesIndex,
@@ -592,7 +610,7 @@ function buildRect(args: {
 /** Decide a rect's value label: string, placement (end vs inside), and show/hide (§2.6.3). */
 function decideValueLabel(
   r: PlannedRect,
-  ctx: { isV: boolean; valueLabels: "auto" | "off"; unit: string; customText?: string; plotX1: number; growLen: number },
+  ctx: { isV: boolean; valueLabels: "auto" | "off"; unit: string; customText?: string; plotX1: number; growLen: number; plotY0: number },
 ) {
   const text = ctx.customText != null ? ctx.customText : formatValue(r.value, ctx.unit);
   r.valueText = text;
@@ -616,8 +634,8 @@ function decideValueLabel(
   // The bar's painted extent along the growth axis, and the gap to the plot edge.
   const extent = ctx.isV ? r.h : r.w;
   const barEnd = ctx.isV ? r.y : r.x + r.w; // vertical: top y (smaller=higher); horizontal: right x
-  // End-placement slot: vertical = space above the bar top to PLOT_Y0; horizontal = space right of bar end to plotX1.
-  const endSlot = ctx.isV ? barEnd - PLOT_Y0 : ctx.plotX1 - barEnd;
+  // End-placement slot: vertical = space above the bar top to the (scaled) plot top; horizontal = space right of bar end to plotX1.
+  const endSlot = ctx.isV ? barEnd - ctx.plotY0 : ctx.plotX1 - barEnd;
   // For vertical, an end label sits ABOVE the bar; its width must fit the band, height ~the slot.
   // For horizontal, an end label sits to the right; width must fit endSlot.
   const endFits = ctx.isV ? endSlot >= VALUE_LABEL_PX + LABEL_PAD : endSlot >= estPx + LABEL_PAD;

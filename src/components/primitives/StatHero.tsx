@@ -1,5 +1,6 @@
-import type { CSSProperties } from "react";
-import { colors, type AccentKey } from "@/tokens/design";
+import { useContext, type CSSProperties } from "react";
+import { colors, resolveFormat, type AccentKey } from "@/tokens/design";
+import { FormatContext } from "@/components/layout/formatContext";
 import { appear } from "@/lib/reveal";
 import { easings } from "@/tokens/motion";
 import { planCountUp } from "@/lib/countup";
@@ -28,16 +29,16 @@ const NOTE_START = 0.46;
 const NOTE_DUR = 0.1;
 const RISE_PX = 8;
 
-// Ring geometry (C7) — fixed constants, mirrored by tools/qa-stathero.mjs.
-const RING_SIZE = 320;
-const RING_STROKE = 18; // → 6.5px at the 2.77× mobile downscale (≥ 3px stroke floor)
-const RING_R = (RING_SIZE - RING_STROKE) / 2; // 151
-const RING_C = 2 * Math.PI * RING_R; // ≈ 948.76
+// Ring geometry (C7). RING_BASE = the reference (1:1 / portrait); the ring + its stack gap scale UP on the
+// taller aspects so a lone hero ring fills its share of the frame and the description isn't cramped against
+// it (Emil's format feedback). Scaling only ever grows the stroke/font, so mobile floors stay satisfied.
 const RING_TRACK = "rgba(244,241,234,0.10)";
-const RING_TEXT_WIDTH = 240; // FitLine box inside the ring (max chord ≈ 267px, C7)
-
 const PLAIN_FONT = 104;
-const RING_FONT = 84;
+const RING_BASE = { size: 320, stroke: 18, font: 84, textWidth: 240 }; // stroke → 6.5px at 2.77× (≥3px floor)
+// Per-aspect scale for the ring + the ring→description gap. 1:1 square is the reference ("1:1 is fine");
+// 4:5 portrait and 9:16 vertical get a proportionally bigger ring + more breathing room. Kept modest.
+const RING_SCALE: Record<string, number> = { square: 1, portrait: 1.16, vertical: 1.34 };
+const STACK_GAP: Record<string, number> = { square: 20, portrait: 32, vertical: 44 };
 
 const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
 
@@ -76,6 +77,17 @@ export function StatHero({
   pop = true,
   countUp = true,
 }: StatHeroProps) {
+  // Ring + gap scale to the output aspect (read from FormatContext; portrait when unset).
+  const fmtKey = resolveFormat(useContext(FormatContext));
+  const ringScale = RING_SCALE[fmtKey] ?? 1;
+  const RING_SIZE = Math.round(RING_BASE.size * ringScale);
+  const RING_STROKE = Math.round(RING_BASE.stroke * ringScale);
+  const RING_R = (RING_SIZE - RING_STROKE) / 2;
+  const RING_C = 2 * Math.PI * RING_R;
+  const RING_FONT = Math.round(RING_BASE.font * ringScale);
+  const RING_TEXT_WIDTH = Math.round(RING_BASE.textWidth * ringScale);
+  const stackGap = STACK_GAP[fmtKey] ?? 20;
+
   // Mode is a pure function of DATA, never of `t` (C2/C8) — the ring can never
   // appear/disappear across the timeline.
   const ring = planRing(proportion, big);
@@ -126,7 +138,7 @@ export function StatHero({
   const fitClass = `font-display font-semibold tracking-tight leading-none ${accentClass[accent]}`;
 
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-5 text-center" data-stat-root>
+    <div className="flex h-full flex-col items-center justify-center text-center" style={{ gap: stackGap }} data-stat-root>
       <div
         data-stat-hero={ring.ring ? "ring" : "plain"}
         data-stat-mode={plan?.animate ? "count" : "fade"}

@@ -65,6 +65,23 @@ const clamp = (x: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, x
 const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
 const isNum = (x: unknown): x is number => typeof x === "number" && Number.isFinite(x);
 
+// ── PL-0.8 row-aware viewBox (ported from candlestick.ts plotBounds / scatter.ts) ────────────
+// The renderer measures its row's px aspect and passes a `viewH` so the viewBox aspect MATCHES the
+// row and the SVG fills the FULL row width (a fixed 640-high box letterboxes into a short square
+// row at less than half the width — Emil's format-bench feedback). Fixed top air + bottom band
+// (x-tick labels + axis title); only the growth band compresses. viewH 640 → {70, 560} = today's
+// fixed layout, byte-identical (the check suite never passes viewH).
+export const MIN_VIEW_H = 320;
+const BOTTOM_BAND = VIEW_H - BASELINE_Y; // 80 — the x-label + axis-title band (fixed px)
+export type HistBounds = { viewH: number; plotY0: number; baselineY: number };
+export function clampViewH(viewH: number): number {
+  return clamp(Math.round(isNum(viewH) ? viewH : VIEW_H), MIN_VIEW_H, VIEW_H);
+}
+export function histBounds(viewH: number): HistBounds {
+  const vH = clampViewH(viewH);
+  return { viewH: vH, plotY0: PLOT_Y0, baselineY: vH - BOTTOM_BAND };
+}
+
 const estBinPx = (s: string) => estW(s) * BIN_EST_SCALE;
 const estMarkerPx = (s: string) => estW(s) * MARKER_EST_SCALE;
 
@@ -116,6 +133,10 @@ export type HistogramPlan = {
   valueLabels: HistKnobLabels;
   stagger: number;
   barGrowDur: number;
+  // PL-0.8 row-aware viewBox geometry (default viewH 640 ⇒ {640, 70, 560} = byte-identical).
+  viewH: number;
+  plotY0: number;
+  baselineY: number;
   dropped: {
     invalidValues: number;
     invalidBins: number;
@@ -146,6 +167,8 @@ export type PlanHistogramInput = {
   axisMax?: number;
   valueLabels?: HistKnobLabels | string;
   accent?: string;
+  /** PL-0.8 — row-aware viewBox height (renderer-measured). Omitted/invalid → VIEW_H (640). */
+  viewH?: number;
 };
 
 // ── REUSED grow easing exports (markers add a draw-on reveal mirroring scatter trendReveal) ──
@@ -269,6 +292,8 @@ export function planHistogram(input: PlanHistogramInput): HistogramPlan {
   const yLabel = typeof input.yLabel === "string" ? input.yLabel : "count";
   const accentKey = accentForIndex(input.accent, 0);
   const dropped = emptyDropped();
+  // Row-aware plot band (PL-0.8). viewH defaults to 640 → {y0:70, baseline:560} = today's layout.
+  const B = histBounds(input.viewH ?? VIEW_H);
 
   const hasValues = Array.isArray(input.values) && input.values.length > 0;
   const hasBins = Array.isArray(input.bins) && input.bins.length > 0;
@@ -293,7 +318,7 @@ export function planHistogram(input: PlanHistogramInput): HistogramPlan {
       dropped.invalidValues++;
       return false;
     });
-    if (finite.length === 0) return emptyPlan(xLabel, yLabel, xUnit, accentKey, markersKnob, valueLabels, dropped);
+    if (finite.length === 0) return emptyPlan(xLabel, yLabel, xUnit, accentKey, markersKnob, valueLabels, dropped, B);
 
     binCount = clamp(isNum(input.binCount) ? Math.round(input.binCount) : sturges(finite.length), MIN_BINS, MAX_BINS);
 
@@ -338,7 +363,7 @@ export function planHistogram(input: PlanHistogramInput): HistogramPlan {
       if (!ok) dropped.invalidBins++;
       return ok;
     });
-    if (valid.length === 0) return emptyPlan(xLabel, yLabel, xUnit, accentKey, markersKnob, valueLabels, dropped);
+    if (valid.length === 0) return emptyPlan(xLabel, yLabel, xUnit, accentKey, markersKnob, valueLabels, dropped, B);
     const sorted = valid.slice().sort((a, b) => a.x0 - b.x0);
     // Honor the cap (use the first MAX_BINS); flag any gaps/overlaps but render edges verbatim.
     const kept = sorted.slice(0, MAX_BINS);
@@ -355,7 +380,7 @@ export function planHistogram(input: PlanHistogramInput): HistogramPlan {
     // Markers suppressed in bins-only mode (no raw sample → no honest statistic).
     if (markersKnob !== "off") dropped.markersSuppressed++;
   } else {
-    return emptyPlan(xLabel, yLabel, xUnit, accentKey, markersKnob, valueLabels, dropped);
+    return emptyPlan(xLabel, yLabel, xUnit, accentKey, markersKnob, valueLabels, dropped, B);
   }
 
   // 3. Count (y) axis — 0-baseline + niceMax(maxBinCount). REUSE bars.
@@ -368,8 +393,8 @@ export function planHistogram(input: PlanHistogramInput): HistogramPlan {
   const xScale = scaleLinear().domain([axisMinX, axisMaxX]).range([PLOT_X0, PLOT_X1]);
   const binWidthPx = (PLOT_X1 - PLOT_X0) / binCount;
 
-  // 5. Count scale → bin heights (REUSE the bars geometry model: grow UP from BASELINE_Y).
-  const growLen = BASELINE_Y - PLOT_Y0;
+  // 5. Count scale → bin heights (REUSE the bars geometry model: grow UP from the row-aware baseline).
+  const growLen = B.baselineY - B.plotY0;
   const countScale = scaleLinear().domain([0, axisMaxCount]).range([0, growLen]);
 
   const stagger = staggerForN(binCount);
@@ -385,7 +410,7 @@ export function planHistogram(input: PlanHistogramInput): HistogramPlan {
     } else if (count === 0) {
       h = 0;
     }
-    const y = BASELINE_Y - h;
+    const y = B.baselineY - h;
     // Per-bin count label fit-or-hide.
     const countText = String(count);
     let showCount = false;
@@ -498,6 +523,9 @@ export function planHistogram(input: PlanHistogramInput): HistogramPlan {
     valueLabels,
     stagger,
     barGrowDur: 0.3, // BAR_GROW_DUR (REUSE bars)
+    viewH: B.viewH,
+    plotY0: B.plotY0,
+    baselineY: B.baselineY,
     dropped,
     ...(degenerate ? { degenerate } : {}),
     empty: false,
@@ -512,10 +540,14 @@ function emptyPlan(
   markersKnob: HistKnobMarkers,
   valueLabels: HistKnobLabels,
   dropped: HistogramPlan["dropped"],
+  bounds: HistBounds = histBounds(VIEW_H),
 ): HistogramPlan {
   const countTicks: number[] = [];
   for (let i = 0; i <= TICK_COUNT; i++) countTicks.push(i / TICK_COUNT);
   return {
+    viewH: bounds.viewH,
+    plotY0: bounds.plotY0,
+    baselineY: bounds.baselineY,
     bins: [],
     edges: [],
     xTickIndices: [],

@@ -104,7 +104,10 @@ export function Donut({
   return (
     <svg
       viewBox={`0 0 ${VIEW} ${VIEW}`}
-      className="block h-auto w-full"
+      // h-full (not h-auto): in a SHORT viz row (square) an h-auto svg resolves its height from the
+      // parent's auto width chain and collapses to a fraction of the row — the tiny-donut bug. h-full
+      // + meet scales the ring to min(row width, row height), the intended "fill the box" behavior.
+      className="block h-full w-full"
       role="img"
       aria-label={caption ?? "composition of a whole"}
       data-donut

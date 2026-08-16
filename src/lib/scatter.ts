@@ -108,6 +108,7 @@ export type PlannedPoint = {
   accentKey: AccentKey;
   label: string;
   showLabel: boolean; // pointLabels=auto fit-or-hide decision
+  labelSide: "right" | "left"; // right preferred; LEFT when the right box would sit under another dot
   labelHideReason?: "off" | "empty" | "tooLong" | "tooThin" | "collide";
   popStart: number; // POP_START + stagger·k (k = render order)
 };
@@ -432,17 +433,20 @@ export function planScatter(input: PlanScatterInput): ScatterPlan {
       accentKey: accentForIndex(p.accent, k),
       label: p.label,
       showLabel: false, // decided below
+      labelSide: "right" as const, // decided below
       popStart: POP_START + stagger * k,
     };
   });
 
   // 7. Point-label fit-or-hide (greedy author-order pass; earlier kept on collision). §2.6.
-  //    A label box sits to the RIGHT of its dot, vertically centered. Hidden if off / empty /
-  //    > 20cp / would exceed the room to the nearest plot edge / overlaps a visible label.
+  //    A label box sits BESIDE its dot (RIGHT preferred, LEFT as the fallback), vertically centered.
+  //    Hidden if off / empty / > 20cp / no side has room / every side collides with a visible label
+  //    or with ANOTHER DOT — a dot stamped over a neighbour's label text was unreadable at render
+  //    (Emil's format-bench feedback); the old pass only tested label-vs-label.
   type LabelBox = { x: number; y: number; w: number; h: number };
   const visibleBoxes: LabelBox[] = [];
-  const labelBox = (pt: PlannedPoint, est: number): LabelBox => ({
-    x: pt.cx + DOT_R + 4,
+  const labelBox = (pt: PlannedPoint, est: number, side: "right" | "left"): LabelBox => ({
+    x: side === "right" ? pt.cx + DOT_R + 4 : pt.cx - DOT_R - 4 - est,
     y: pt.cy - POINT_LABEL_PX / 2,
     w: est,
     h: POINT_LABEL_PX,
@@ -452,6 +456,17 @@ export function planScatter(input: PlanScatterInput): ScatterPlan {
     const oy = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y);
     return ox > 4 && oy > 4 ? Math.min(ox, oy) : 0;
   };
+  // A label box may not sit under any OTHER point's dot (circle-vs-rect with a small clearance).
+  const DOT_CLEAR = DOT_R + 6;
+  const hitsDot = (pt: PlannedPoint, b: LabelBox): boolean =>
+    points.some((o) => {
+      if (o === pt) return false;
+      const nx = clamp(o.cx, b.x, b.x + b.w);
+      const ny = clamp(o.cy, b.y, b.y + b.h);
+      const dx = o.cx - nx;
+      const dy = o.cy - ny;
+      return dx * dx + dy * dy < DOT_CLEAR * DOT_CLEAR;
+    });
   for (const pt of points) {
     if (pointLabels === "off") {
       pt.labelHideReason = "off";
@@ -468,21 +483,27 @@ export function planScatter(input: PlanScatterInput): ScatterPlan {
       continue;
     }
     const est = estPointPx(trimmed);
-    // Room to the right plot edge (label is right-anchored at the dot). If it would exceed, hide.
     const roomRight = PLOT_X1 - (pt.cx + DOT_R + 4) - LABEL_PAD;
-    if (est > roomRight) {
-      pt.labelHideReason = "tooThin";
-      dropped.hiddenPointLabels++;
-      continue;
+    const roomLeft = pt.cx - DOT_R - 4 - PLOT_X0 - LABEL_PAD;
+    // First side with room + no dot under the text + no visible-label overlap wins (right preferred —
+    // fixtures whose right box is clean keep today's placement byte-identically).
+    let placed: LabelBox | null = null;
+    for (const side of ["right", "left"] as const) {
+      if (est > (side === "right" ? roomRight : roomLeft)) continue;
+      const box = labelBox(pt, est, side);
+      if (hitsDot(pt, box)) continue;
+      if (visibleBoxes.some((b) => boxOverlap(b, box) > 0)) continue;
+      pt.labelSide = side;
+      placed = box;
+      break;
     }
-    const box = labelBox(pt, est);
-    if (visibleBoxes.some((b) => boxOverlap(b, box) > 0)) {
-      pt.labelHideReason = "collide";
+    if (!placed) {
+      pt.labelHideReason = est > roomRight && est > roomLeft ? "tooThin" : "collide";
       dropped.hiddenPointLabels++;
       continue;
     }
     pt.showLabel = true;
-    visibleBoxes.push(box);
+    visibleBoxes.push(placed);
   }
 
   // 8. OLS trend fit (on the KEPT points) + Liang–Barsky clip. Suppressed → fitted:null. §2.6.

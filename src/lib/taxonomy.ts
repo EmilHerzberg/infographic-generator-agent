@@ -62,6 +62,19 @@ export const NODE_GAP_X = 24; // C-GAP — min horizontal gap between sibling ch
 export const NODE_PAD_X = 18; // horizontal padding inside a chip (label box = chipW − 2·NODE_PAD_X)
 export const RANK_GAP_Y = 150; // C-RANKGAP — vertical center-to-center between ranks at default viewH
 export const MIN_RANK_GAP_Y = 104; // floor for RANK_GAP_Y (NODE_H 64 + ≥40px link air) — links visible
+// Tall-frame spread (Emil's format-bench feedback): on 4:5/9:16 the tree should USE the extra frame
+// height instead of clamping to the portrait-era caps — a taller viewH ceiling lets the row-aware
+// measure through, and the rank-gap cap grows WITH the extra height (rankGapCap below). viewH ≤ 640
+// stays byte-identical (cap 150 exactly — the qa fit table holds).
+export const MAX_VIEW_H = 880; // row-aware viewBox ceiling (was VIEW_H 640)
+/** Rank-gap cap: 150 at ≤ default viewH (byte-identical portrait-era geometry); UNCAPPED above it —
+ *  the fixed tall-format heights (720/880) are chosen deliberately, so the gap FILLS them exactly.
+ *  A full tree means no dead band below it inside the svg, which is what pulls the footer visually
+ *  closer on 9:16 (Emil's format-bench feedback) — and the fill formula is idempotent for the
+ *  qa recompute-from-rendered-viewBox contract (no cap↔viewH coupling). */
+export function rankGapCap(vH: number): number {
+  return vH > VIEW_H ? Number.POSITIVE_INFINITY : RANK_GAP_Y;
+}
 export const MIN_LEAF_PITCH = 120; // MIN_NODE_W 96 + NODE_GAP_X 24 — leaf-rank pitch floor (no overlap)
 export const LEAF_WRAP_EXTRA = NODE_H + NODE_GAP_X; // 88 — the 2nd leaf sub-row band (chip + gap)
 export const LINK_STROKE = 4; // C-LINK — link stroke (→ 1.44px@390 ≥ the 1px hairline floor)
@@ -137,6 +150,11 @@ export type PlannedLink = {
   y1: number; // parent chip bottom-center
   x2: number;
   y2: number; // child chip top-center
+  /** The y of the link's horizontal run — the CHIP-FREE gap directly above the child's own row.
+   *  Shared per (parent, sub-row), so a category's links merge into one clean trunk-and-bus instead
+   *  of per-link midpoints slicing through the first leaf row (Emil's format-bench feedback).
+   *  Absent → the legacy (y1+y2)/2 midpoint. */
+  busY?: number;
   drawStart: number;
   drawDur: number; // strokeDashoffset draw window (overlap-stagger within rank)
   accentKey: AccentKey; // child's (=parent's) accent — neutral-tinted (§2.9)
@@ -185,7 +203,12 @@ export type PlanTaxonomyInput = {
 
 /** Clamp an aspect-derived viewBox height into the supported band [MIN_VIEW_H, VIEW_H]. */
 export function clampViewH(viewH: number): number {
-  return clamp(Math.round(isNum(viewH) ? viewH : VIEW_H), MIN_VIEW_H, VIEW_H);
+  // Quantize to a 16px grid: above the old 640 ceiling the clamp no longer swallows the ±1px
+  // per-page-load row-measure noise (font swap / FitZone zoom timing), and un-quantized that noise
+  // becomes cross-load geometry drift the D9 layout-constancy gate correctly rejects. 640 is a
+  // multiple of 16, so the default static path stays byte-identical.
+  const q = Math.round((isNum(viewH) ? viewH : VIEW_H) / 16) * 16;
+  return clamp(q, MIN_VIEW_H, MAX_VIEW_H);
 }
 
 export type PlotBounds = { viewH: number; rootY: number; catY: number; leafY: number; rankGapY: number; leafRows: number };
@@ -205,7 +228,7 @@ export function rankBands(viewH: number): PlotBounds {
   const twoRowsHold = gap2raw >= MIN_RANK_GAP_Y;
   const leafRows = twoRowsHold ? 2 : 1;
   const leafWrapExtra = leafRows === 2 ? LEAF_WRAP_EXTRA : 0;
-  const rankGapY = clamp((vH - RANK_TOP - RANK_BOTTOM_PAD - NODE_H / 2 - leafWrapExtra) / RANK_SPAN, MIN_RANK_GAP_Y, RANK_GAP_Y);
+  const rankGapY = clamp((vH - RANK_TOP - RANK_BOTTOM_PAD - NODE_H / 2 - leafWrapExtra) / RANK_SPAN, MIN_RANK_GAP_Y, rankGapCap(vH));
   const rootY = RANK_TOP;
   const catY = rootY + rankGapY;
   const leafY = catY + rankGapY;
@@ -534,6 +557,31 @@ export function planTaxonomy(input: PlanTaxonomyInput): TaxonomyPlan {
   type LeafSpec = { ci: number; li: number; cx: number; cy: number; w: number; show: boolean; scale: number; reason?: "empty" | "tooLong" | "tooThin"; valueText: string | null; showValue: boolean };
   const VALUE_GAP = 18; // gap between the label zone and the value chip (a buffer vs estW vs real metrics)
   const leafSpecs: LeafSpec[] = [];
+
+  // Pre-pass: every leaf's global sub-row + slot x. The slot GRID is fixed before chip widths, so the
+  // width cap can use the REAL nearest same-sub-row neighbour instead of assuming one at pitch
+  // distance. A leaf alone on its sub-row (the overflow row — "Arize Phoenix" under a 3-leaf category)
+  // may then grow toward MAX_NODE_W and KEEP a label the pitch-cap would have hidden (the empty-chip
+  // defect). Chips with a direct neighbour at pitch keep the exact old cap (pitch − NODE_GAP_X) —
+  // already-fitting layouts stay byte-identical. Pairwise-safe: w ≤ minNeighbourDist − NODE_GAP_X for
+  // BOTH chips ⇒ half-widths sum ≤ dist − gap ⇒ edge gap ≥ NODE_GAP_X.
+  const rowXs = new Map<number, number[]>();
+  normCats.forEach((c, ci) => {
+    const perRow = Math.max(1, Math.ceil(c.leaves.length / catRows[ci]));
+    c.leaves.forEach((_leaf, li) => {
+      const r = Math.floor(li / perRow);
+      const cx = leafX0 + (catSlotStart[ci] + (li % perRow)) * leafPitch;
+      const xs = rowXs.get(r);
+      if (xs) xs.push(cx);
+      else rowXs.set(r, [cx]);
+    });
+  });
+  const leafCapRoom = (cx: number, r: number): number => {
+    let nearest = Infinity;
+    for (const x of rowXs.get(r) ?? []) if (x !== cx) nearest = Math.min(nearest, Math.abs(x - cx));
+    const edgeRoom = 2 * Math.min(cx - CANVAS_X0, CANVAS_X1 - cx); // centered growth stays in-canvas
+    return Math.min(nearest === Infinity ? Infinity : nearest - NODE_GAP_X, edgeRoom);
+  };
   normCats.forEach((c, ci) => {
     const rows = catRows[ci];
     const perRow = Math.max(1, Math.ceil(c.leaves.length / rows));
@@ -543,9 +591,13 @@ export function planTaxonomy(input: PlanTaxonomyInput): TaxonomyPlan {
       const r = Math.floor(li / perRow); // sub-row 0..rows-1
       const slotInRow = li % perRow; // 0..perRow-1 within this sub-row
       const slot = catSlotStart[ci] + slotInRow; // global TOP-row slot (sub-rows reuse the same xs)
+      const cx = leafX0 + slot * leafPitch;
       // A leaf with a value chip needs a WIDER chip so the label + count both fit. Size the chip to the
-      // label, then if a value chip will show, widen by the value text + a gap (clamped to the pitch).
-      const inner0 = chipWidth(leaf.label, LEAF_LABEL_PX, leafPitch) - 2 * NODE_PAD_X;
+      // label, then if a value chip will show, widen by the value text + a gap. The width room comes
+      // from the REAL same-sub-row neighbour (leafCapRoom), not the nominal pitch — chipWidth subtracts
+      // NODE_GAP_X internally, so hand it the room re-expressed as a pitch.
+      const roomPitch = Math.min(leafCapRoom(cx, r), MAX_NODE_W) + NODE_GAP_X;
+      const inner0 = chipWidth(leaf.label, LEAF_LABEL_PX, roomPitch) - 2 * NODE_PAD_X;
 
       // Value chip (showValues:"on" + a finite value). Off ⇒ suppressed (advisory). Resolved BEFORE the
       // label so the label zone reserves room for it (no label↔value overlap).
@@ -568,13 +620,13 @@ export function planTaxonomy(input: PlanTaxonomyInput): TaxonomyPlan {
           dropped.valueSuppressed++;
         }
       }
-      // Chip width: label zone + value zone + padding, capped per-rank (no overlap with neighbours).
-      const cap = Math.min(MAX_NODE_W, Math.max(MIN_NODE_W, leafPitch - NODE_GAP_X));
+      // Chip width: label zone + value zone + padding, capped by the REAL same-sub-row neighbour room
+      // (≥ the old pitch-based cap; equal when a direct neighbour sits at pitch distance).
+      const cap = Math.min(MAX_NODE_W, Math.max(MIN_NODE_W, leafCapRoom(cx, r)));
       const cw = clamp(inner0 + valueW + 2 * NODE_PAD_X, MIN_NODE_W, cap);
       const labelInner = cw - 2 * NODE_PAD_X - valueW; // the label's own zone (value reserved)
       const fit = fitLabel(leaf.label, cw, LEAF_LABEL_MAX_CP, LEAF_FIT_FLOOR_ZOOM, LEAF_EST_SCALE, labelInner);
       if (!fit.show && leaf.label.trim().length > 0) dropped.hiddenLabels++;
-      const cx = leafX0 + slot * leafPitch;
       const cy = leafY + r * LEAF_WRAP_EXTRA;
       catLeafXs[ci].push(cx);
 
@@ -601,18 +653,54 @@ export function planTaxonomy(input: PlanTaxonomyInput): TaxonomyPlan {
     return xsForCat.length ? xsForCat.reduce((s, x) => s + x, 0) / xsForCat.length : leafX0 + catSlotStart[ci] * leafPitch;
   });
   const catCountN = catCenterX.length;
+  // Category widths + centers. The old single pass sized each chip from the PRE-clamp neighbour
+  // distances, then the canvas-edge clamp PULLED an edge chip inward and wrote the moved center
+  // back — invalidating the very gap the widths were computed against (two wide categories over
+  // sparse leaf groups rendered touching — Emil's format-bench feedback). And shrinking widths to
+  // restore the gap hides labels. The right layout: give every chip the width its LABEL wants
+  // (canvas-capped), then RELAX the centers apart (minimum displacement from the leaf-mean ideal)
+  // so pairwise edge gaps ≥ NODE_GAP_X and every chip stays inside the canvas.
+  const interGaps = NODE_GAP_X * Math.max(0, catCountN - 1);
+  const catW: number[] = normCats.map((c) => chipWidth(c.label, CAT_LABEL_PX, canvasW));
+  // If the canvas can't hold every label-wanted chip, shrink proportionally. The MIN_NODE_W floor
+  // can push the total back over — re-shrink the UNPINNED chips (chips above the floor) so the true
+  // total lands at the canvas. Only an all-floored layout stays infeasible (accepted: tiny margin
+  // poke, never sibling overlap).
+  for (let pass = 0; pass < 3; pass++) {
+    const total = catW.reduce((s, w) => s + w, 0) + interGaps;
+    if (total <= canvasW) break;
+    const unpinned: number[] = [];
+    let pinnedSum = 0;
+    catW.forEach((w, i) => (w > MIN_NODE_W + 1e-6 ? unpinned.push(i) : (pinnedSum += w)));
+    const budget = canvasW - interGaps - pinnedSum;
+    const unpinnedSum = unpinned.reduce((s, i) => s + catW[i], 0);
+    if (!unpinned.length || budget <= 0 || unpinnedSum <= 0) break;
+    const k = budget / unpinnedSum;
+    for (const i of unpinned) catW[i] = Math.max(MIN_NODE_W, catW[i] * k);
+  }
+  // Min-displacement 1D relaxation: forward pass (left bound + predecessor separation), backward
+  // pass (right bound + successor separation), forward again. With the total fitting the canvas
+  // (guaranteed above, modulo the MIN_NODE_W floor), this lands on a feasible, deterministic layout.
+  const sepAt = (i: number) => (catW[i] + catW[i + 1]) / 2 + NODE_GAP_X;
+  for (let pass = 0; pass < 2; pass++) {
+    for (let i = 0; i < catCountN; i++) {
+      catCenterX[i] = Math.max(catCenterX[i], CANVAS_X0 + catW[i] / 2, i > 0 ? catCenterX[i - 1] + sepAt(i - 1) : -Infinity);
+    }
+    for (let i = catCountN - 1; i >= 0; i--) {
+      catCenterX[i] = Math.min(catCenterX[i], CANVAS_X1 - catW[i] / 2, i < catCountN - 1 ? catCenterX[i + 1] - sepAt(i) : Infinity);
+    }
+  }
+  // Final LEFT-bound sweep: the loop ends on a backward (right-bound) pass, which in the rare
+  // floored-overflow case can push the leftmost chip past CANVAS_X0. Push right only — order and
+  // separations are preserved; with a feasible total this keeps every chip inside the canvas.
+  for (let i = 0; i < catCountN; i++) {
+    catCenterX[i] = Math.max(catCenterX[i], CANVAS_X0 + catW[i] / 2, i > 0 ? catCenterX[i - 1] + sepAt(i - 1) : -Infinity);
+  }
   normCats.forEach((c, ci) => {
-    // Nearest-neighbour gap (center-to-center) on the category rank.
-    let nbrGap = Infinity;
-    if (ci > 0) nbrGap = Math.min(nbrGap, catCenterX[ci] - catCenterX[ci - 1]);
-    if (ci < catCountN - 1) nbrGap = Math.min(nbrGap, catCenterX[ci + 1] - catCenterX[ci]);
-    const pitch = Number.isFinite(nbrGap) ? nbrGap : canvasW;
-    const cw = chipWidth(c.label, CAT_LABEL_PX, pitch);
+    const cw = catW[ci];
     const fit = fitLabel(c.label, cw, CAT_LABEL_MAX_CP, CAT_FIT_FLOOR_ZOOM, CAT_EST_SCALE);
     if (!fit.show && c.label.trim().length > 0) dropped.hiddenLabels++;
-    // Clamp the chip center so the chip never exits the canvas at an edge category.
-    const cx = clamp(catCenterX[ci], CANVAS_X0 + cw / 2, CANVAS_X1 - cw / 2);
-    catCenterX[ci] = cx;
+    const cx = catCenterX[ci];
     // Fix up a 0-child category's band to its (clamped) chip point.
     const xsForCat = catLeafXs[ci];
     if (xsForCat.length === 0) {
@@ -717,6 +805,11 @@ export function planTaxonomy(input: PlanTaxonomyInput): TaxonomyPlan {
       const drawStart = catEnd + r2Stagger * leafOrder;
       const drawEnd = drawStart + LINK_DUR;
       leafOrder++;
+      // Bus routing: the horizontal run lives in the chip-free band ABOVE the child's own sub-row —
+      // sub-row 1: between the category rank and leaf row 1; sub-row 2: BETWEEN the two leaf rows.
+      // Shared per (category, sub-row), so all of a category's drops merge into one clean trunk.
+      const isSubRow2 = nodes[leafIdx].cy > leafY + 1;
+      const busY = isSubRow2 ? leafY + LEAF_WRAP_EXTRA / 2 : (catY + NODE_H / 2 + (leafY - NODE_H / 2)) / 2;
       links.push({
         parent: catNodeIdx,
         child: leafIdx,
@@ -724,6 +817,7 @@ export function planTaxonomy(input: PlanTaxonomyInput): TaxonomyPlan {
         y1: nodes[catNodeIdx].cy + nodes[catNodeIdx].h / 2,
         x2: nodes[leafIdx].cx,
         y2: nodes[leafIdx].cy - nodes[leafIdx].h / 2,
+        busY,
         drawStart,
         drawDur: LINK_DUR,
         accentKey: nodes[leafIdx].accentKey,

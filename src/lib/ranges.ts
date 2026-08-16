@@ -62,6 +62,36 @@ export const AXIS_LABEL_FONT = 24; // C5 — design token text.axisLabel (the ga
 
 // ── Defensive caps (C8/C9) — no-ops on every in-spec input. ─────────────────────────────────────
 export const MAX_ENTRIES_PER_LANE = 4; // C8 — PostRenderer already sliced to 4; the planner OWNS it now
+
+// Vertical-fill + type scale (Emil's format-bench feedback: the two-lane block rendered IDENTICALLY
+// at every aspect). The divergence/funnel vGeom pattern: every lane/axis y, the row pitch, the bar
+// height and the viewBox height multiply by `vScale` so the lanes SPREAD over a tall frame; fonts
+// additionally scale ×1.15 when stretched ("bigger typo" on 9:16). Default 1 ⇒ byte-identical.
+export type RangesVGeom = {
+  VIEW_H: number;
+  TOP_LANE_Y: number;
+  BOTTOM_LANE_Y: number;
+  AXIS_Y: number;
+  ROW_HEIGHT: number;
+  BAR_HEIGHT: number;
+  TOP_LABEL_Y: number;
+  BOTTOM_LABEL_Y: number;
+  fontScale: number;
+};
+export function rangesVGeom(vScale = 1): RangesVGeom {
+  const s = Number.isFinite(vScale) && vScale > 0 ? vScale : 1;
+  return {
+    VIEW_H: Math.round(VIEW_H * s),
+    TOP_LANE_Y: TOP_LANE_Y * s,
+    BOTTOM_LANE_Y: BOTTOM_LANE_Y * s,
+    AXIS_Y: AXIS_Y * s,
+    ROW_HEIGHT: Math.round(ROW_HEIGHT * s),
+    BAR_HEIGHT: Math.round(BAR_HEIGHT * s),
+    TOP_LABEL_Y: Math.round(40 * s),
+    BOTTOM_LABEL_Y: Math.round(285 * s),
+    fontScale: s > 1 ? 1.15 : 1,
+  };
+}
 // A row label is hidden if it can't fit the left label column at 22px. The label column is 300px wide;
 // estW is calibrated @26px → scale to 22px. A label estimated wider than the column is hidden (no bleed).
 export const MAX_LABEL_CHARS = 64; // C8 — beyond this a label is absurd → hidden regardless of width
@@ -115,6 +145,8 @@ export type RangesPlan = {
   barAreaW: number;
   topLaneY: number;
   bottomLaneY: number;
+  /** Format-scaled vertical geometry + type scale the renderer must draw with. */
+  vgeom: RangesVGeom;
   yearToX: (year: number) => number;
   topGroupLabel: string;
   bottomGroupLabel: string;
@@ -144,6 +176,8 @@ export type PlanRangesInput = {
   bottomEntries?: RangeEntryInput[];
   topAccent?: unknown;
   bottomAccent?: unknown;
+  /** Vertical-fill scale (chartVScale) — default 1 ⇒ byte-identical; checks pass none. */
+  vScale?: number;
   minYear?: number;
   maxYear?: number;
   marketLine?: { year?: number; label?: string } | null;
@@ -153,6 +187,7 @@ const isNum = (n: unknown): n is number => typeof n === "number" && !Number.isNa
 
 export function planRanges(input: PlanRangesInput = {}): RangesPlan {
   const counters = { entriesDropped: 0, labelsHidden: 0, invalidAccents: 0, axisGuarded: false };
+  const G = rangesVGeom(input.vScale);
 
   // ── Lane caps (C8) — reproduce PostRenderer's `.slice(0,4)` exactly, surfacing the drop. ──
   const rawTop = Array.isArray(input.topEntries) ? input.topEntries : [];
@@ -184,7 +219,7 @@ export function planRanges(input: PlanRangesInput = {}): RangesPlan {
   if (isAccent(input.bottomAccent)) bottomAccent = input.bottomAccent;
   else if (input.bottomAccent !== undefined) counters.invalidAccents += 1;
 
-  // ── Per-entry geometry (C2) + label fit-or-hide (C8). ──
+  // ── Per-entry geometry (C2) + label fit-or-hide (C8) — lane ys/pitch from the vScale geom. ──
   const planLane = (raw: RangeEntryInput[], laneY: number, prefix: string): RangesPlanEntry[] =>
     raw.map((e, i) => {
       const label = typeof e.label === "string" ? e.label : "";
@@ -193,11 +228,11 @@ export function planRanges(input: PlanRangesInput = {}): RangesPlan {
       const x = yearToX(start);
       // Min bar width 0 — a zero or reversed (start>end) span never produces a negative width (C8).
       const w = Math.max(0, yearToX(end) - x);
-      const y = laneY + i * ROW_HEIGHT;
-      const labelY = y + BAR_HEIGHT / 2 + 7;
-      // Fit-or-hide: a label estimated wider than the left column at 22px (or over the absurd-length
-      // cap) is hidden entirely rather than bleeding into the bar area. estW is @26px → scale to 22px.
-      const fits = [...label].length <= MAX_LABEL_CHARS && estW(label) * LABEL_FONT_SCALE <= LABEL_FIT_WIDTH;
+      const y = laneY + i * G.ROW_HEIGHT;
+      const labelY = y + G.BAR_HEIGHT / 2 + 7;
+      // Fit-or-hide: a label estimated wider than the left column (at the RENDERED size — base 22px
+      // × the vGeom fontScale) is hidden entirely rather than bleeding past the viewBox left edge.
+      const fits = [...label].length <= MAX_LABEL_CHARS && estW(label) * LABEL_FONT_SCALE * G.fontScale <= LABEL_FIT_WIDTH;
       const showLabel = label.length === 0 ? true : fits;
       if (label.length > 0 && !fits) counters.labelsHidden += 1;
       return {
@@ -215,8 +250,8 @@ export function planRanges(input: PlanRangesInput = {}): RangesPlan {
       };
     });
 
-  const topEntries = planLane(topRaw, TOP_LANE_Y, "t");
-  const bottomEntries = planLane(bottomRaw, BOTTOM_LANE_Y, "b");
+  const topEntries = planLane(topRaw, G.TOP_LANE_Y, "t");
+  const bottomEntries = planLane(bottomRaw, G.BOTTOM_LANE_Y, "b");
 
   // ── Ticks (C5) — every 5 years from minYear+1 (verbatim from the legacy loop). ──
   const ticks: number[] = [];
@@ -231,7 +266,7 @@ export function planRanges(input: PlanRangesInput = {}): RangesPlan {
   if (ml && isNum(ml.year)) {
     const label = typeof ml.label === "string" ? ml.label : "";
     const x = yearToX(ml.year);
-    const placed = placeMarketLabel(x, label);
+    const placed = placeMarketLabel(x, label, G.fontScale);
     marketLine = { year: ml.year, label, x, labelX: placed.labelX, labelAnchor: placed.anchor };
   }
 
@@ -240,8 +275,9 @@ export function planRanges(input: PlanRangesInput = {}): RangesPlan {
     maxYear,
     barAreaX: BAR_AREA_X,
     barAreaW: BAR_AREA_W,
-    topLaneY: TOP_LANE_Y,
-    bottomLaneY: BOTTOM_LANE_Y,
+    topLaneY: G.TOP_LANE_Y,
+    bottomLaneY: G.BOTTOM_LANE_Y,
+    vgeom: G,
     yearToX,
     topGroupLabel: typeof input.topGroupLabel === "string" ? input.topGroupLabel : "",
     bottomGroupLabel: typeof input.bottomGroupLabel === "string" ? input.bottomGroupLabel : "",
@@ -265,9 +301,9 @@ export function planRanges(input: PlanRangesInput = {}): RangesPlan {
 // inward. estW is calibrated @26px; scale to the axis-label font and halve for the centered half-width.
 const AXIS_TICK_FONT_SCALE = AXIS_LABEL_FONT / 26;
 const TICK_EDGE_PAD = 4; // px breathing room from the viewBox edge
-export function clampTickLabelX(year: number, yearToX: (y: number) => number, label: string): number {
+export function clampTickLabelX(year: number, yearToX: (y: number) => number, label: string, fontScale = 1): number {
   const x = yearToX(year);
-  const halfW = (estW(label) * AXIS_TICK_FONT_SCALE) / 2;
+  const halfW = (estW(label) * AXIS_TICK_FONT_SCALE * fontScale) / 2;
   const lo = halfW + TICK_EDGE_PAD;
   const hi = VIEW_W - halfW - TICK_EDGE_PAD;
   return Math.min(Math.max(x, lo), hi);
@@ -288,16 +324,17 @@ const MARKET_LABEL_FONT_SCALE = AXIS_LABEL_FONT / 26; // estW @26px → the 24px
 const MARKET_LABEL_TRACKING = 0.18 * AXIS_LABEL_FONT; // 0.18em letterSpacing → px per inter-char gap
 const MARKET_LABEL_EDGE_PAD = 6; // px breathing room from the viewBox edge
 
-/** Estimated rendered advance (px) of the UPPERCASED, 0.18em-tracked marketLine label. */
-function marketLabelWidth(label: string): number {
+/** Estimated rendered advance (px) of the UPPERCASED, 0.18em-tracked marketLine label. `fontScale`
+ *  MUST match the renderer's (vGeom fontScale) or the edge-fit is decided at the wrong size. */
+function marketLabelWidth(label: string, fontScale = 1): number {
   const upper = label.toUpperCase();
   const chars = [...upper].length;
-  return estW(upper) * MARKET_LABEL_FONT_SCALE + Math.max(0, chars - 1) * MARKET_LABEL_TRACKING;
+  return (estW(upper) * MARKET_LABEL_FONT_SCALE + Math.max(0, chars - 1) * MARKET_LABEL_TRACKING) * fontScale;
 }
 
 /** Place the marketLine label (+ year) so its rendered box never exits the viewBox (PL-0.11). */
-export function placeMarketLabel(x: number, label: string): { labelX: number; anchor: "start" | "end" } {
-  const w = marketLabelWidth(label);
+export function placeMarketLabel(x: number, label: string, fontScale = 1): { labelX: number; anchor: "start" | "end" } {
+  const w = marketLabelWidth(label, fontScale);
   // Start-anchored to the RIGHT of the line (the legacy default) — keep it if its right edge fits.
   if (x + MARKET_LABEL_DX + w <= VIEW_W - MARKET_LABEL_EDGE_PAD) {
     return { labelX: x + MARKET_LABEL_DX, anchor: "start" };

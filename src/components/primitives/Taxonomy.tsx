@@ -25,9 +25,10 @@
 // container the SVG fits by HEIGHT and letterboxes horizontally (complete-but-smaller beats overflow).
 // Spec: planning/primitive-library/handoffs/PL-3.4-taxonomy.md §2.5 / §2.7 / §2.10 / §3.
 
-import { useId, useLayoutEffect, useRef, useState } from "react";
+import { useContext, useId, useLayoutEffect, useRef, useState } from "react";
 import type { Accent } from "@/posts/renderTypes";
-import { colors } from "@/tokens/design";
+import { colors, resolveFormat } from "@/tokens/design";
+import { FormatContext } from "@/components/layout/formatContext";
 import {
   planTaxonomy,
   nodeReveal,
@@ -70,29 +71,39 @@ type Props = {
 export function Taxonomy({ categories, rootLabel, mode = "curve", showValues = "off", unit, caption, t = 1 }: Props) {
   const uid = useId();
 
-  // PL-0.8 — row-aware viewBox: measure the row's px aspect so the viewBox aspect MATCHES it and the
-  // SVG fills the FULL row width (uniform scale ⇒ thin links stay width-driven, no leaf-rank crush).
+  // Tall formats (Emil's format-bench feedback) get a FIXED, format-driven viewH: 720 at 4:5, 880
+  // at 9:16 — the rank gaps open with the extra height (rankGapCap) and the geometry is deterministic
+  // BY CONSTRUCTION. A live measure above the old 640 ceiling let the row's ±1px per-load layout
+  // noise flip quantization buckets and trip the D9 layout-constancy gate; no quantization grid
+  // removes that edge, so tall formats don't measure at all. Both values sit at/below the real tall
+  // row aspects, so the SVG stays width-bound (full row width, thin links width-driven).
+  const fmt = resolveFormat(useContext(FormatContext));
+  const fixedTall = fmt === "vertical" ? 880 : fmt === "portrait" ? 720 : null;
+
+  // PL-0.8 — row-aware viewBox for the SHORT-row range (square / odd wrappers): measure the row's px
+  // aspect so the viewBox aspect MATCHES it (shrink-to-fit below 640 — the pre-existing stable range).
   // SYNCHRONOUS measure inside useLayoutEffect (applied before paint, so Remotion captures the settled
   // frame), plus a ResizeObserver. Pre-measure default = 640 ⇒ static/SSR import byte-identical.
   const boxRef = useRef<HTMLDivElement>(null);
   const [viewH, setViewH] = useState(VIEW_H);
   useLayoutEffect(() => {
+    if (fixedTall != null) return; // format-driven — no measure, no observer
     const box = boxRef.current;
     if (!box) return;
     const measure = () => {
       const w = box.clientWidth;
       const h = box.clientHeight;
       if (!w || !h) return;
-      const next = clampViewH((VIEW_W * h) / w); // viewH = 1000 / aspect, clamped to [MIN_VIEW_H, 640]
+      const next = clampViewH(Math.min(VIEW_H, (VIEW_W * h) / w)); // ≤ 640 in the measured regime
       setViewH((prev) => (Math.abs(prev - next) > 0.5 ? next : prev));
     };
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(box);
     return () => ro.disconnect();
-  }, []);
+  }, [fixedTall]);
 
-  const plan = planTaxonomy({ categories, rootLabel, mode, showValues, unit, viewH });
+  const plan = planTaxonomy({ categories, rootLabel, mode, showValues, unit, viewH: fixedTall ?? viewH });
   const { viewH: vbH } = plan;
 
   if (plan.empty) {
@@ -166,14 +177,18 @@ function Link({ link, mode, nodes, t }: { link: PlannedLink; mode: TaxMode; node
   void nodes;
 }
 
-/** Cubic-Bézier from parent bottom-center → child top-center (vertical control handles). */
+/** Cubic-Bézier from parent bottom-center → child top-center (vertical control handles). The plan's
+ *  busY (the chip-free band above the child's own sub-row) anchors the handles so second-sub-row
+ *  curves bow through the inter-row gap, not through the first row's chips. */
 function curvePath(l: PlannedLink): string {
-  const midY = (l.y1 + l.y2) / 2;
+  const midY = l.busY ?? (l.y1 + l.y2) / 2;
   return `M ${l.x1} ${l.y1} C ${l.x1} ${midY} ${l.x2} ${midY} ${l.x2} ${l.y2}`;
 }
-/** Orthogonal elbow: down to the mid-rank gutter → across → down to the child (the org-chart look). */
+/** Orthogonal elbow: down to the plan's BUS y (the chip-free gap above the child's own sub-row) →
+ *  across → down to the child. Shared bus per (parent, sub-row) merges a category's links into one
+ *  trunk + tidy per-row buses (the org-chart look without per-link midpoints slicing chips). */
 function elbowPath(l: PlannedLink): string {
-  const midY = (l.y1 + l.y2) / 2;
+  const midY = l.busY ?? (l.y1 + l.y2) / 2;
   return `M ${l.x1} ${l.y1} L ${l.x1} ${midY} L ${l.x2} ${midY} L ${l.x2} ${l.y2}`;
 }
 

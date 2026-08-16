@@ -36,6 +36,14 @@ type Props = {
   content?: Content;
 };
 
+// Monogram for a user-supplied signature: initials of the first two words, uppercased (falls back to
+// the first two letters of a single word). Keeps the mark on-brand without carrying Emil's "EH".
+function initialsOf(name: string): string {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  if (words.length >= 2) return (words[0][0] + words[1][0]).toUpperCase();
+  return (words[0] ?? "").slice(0, 2).toUpperCase();
+}
+
 const placementClass: Record<Placement, string> = {
   bottomRight: "absolute right-[80px] bottom-[80px]",
   bottomLeft: "absolute left-[80px] bottom-[80px]",
@@ -52,14 +60,19 @@ export function CreatorSignature({
   pulseProgress = 0,
   content,
 }: Props) {
+  // When a `content.name` is supplied (a SaaS user's own signature) the brand tokens must NOT leak in as
+  // fallbacks — otherwise a user who typed only a name would get Emil's subtitle/email/monogram. So a
+  // supplied signature is authoritative: subtitle/email only appear if the user gave them, and the
+  // monogram is derived from their name. With no content (CLI/personal/QA) the brand defaults stand.
+  const hasContent = !!content?.name;
   const name = content?.name ?? brand.author;
-  const subtitle = content?.subtitle ?? brand.subtitle;
-  const email = content?.email ?? brand.email;
-  const monogram = content?.monogram ?? brand.monogram;
+  const subtitle = hasContent ? content?.subtitle : brand.subtitle;
+  const email = hasContent ? content?.email : brand.email;
+  const monogram = content?.monogram ?? (hasContent ? initialsOf(content!.name!) : brand.monogram);
 
   const includeEmail =
-    showEmail ?? (variant === "service" || (variant === "final" && true));
-  const includeSubtitle = variant !== "minimal";
+    (showEmail ?? (variant === "service" || (variant === "final" && true))) && !!email;
+  const includeSubtitle = variant !== "minimal" && !!subtitle;
 
   const settledOpacity = opacity ?? (variant === "final" ? 1 : 0.9);
   const renderedOpacity = settledOpacity * entranceProgress;

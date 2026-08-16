@@ -2,6 +2,7 @@
 // Motion-capable (drives reveals from a single `t`). No AI-authored code runs here.
 import { PostFrame } from "@/components/layout/PostFrame";
 import { Panel } from "@/components/primitives/Panel";
+import { FitZone } from "@/components/primitives/FitZone";
 import { MetricCard } from "@/components/primitives/MetricCard";
 import { LineChart, type LineSeries } from "@/components/primitives/LineChart";
 import { ClaimList } from "@/components/primitives/ClaimList";
@@ -100,6 +101,7 @@ function Viz({ viz, t }: { viz: RenderViz; t: number }) {
           )
         : undefined;
     return (
+      <FitZone align="center">
       <Panel label={viz.caption ?? "claims vs. reality"}>
         <ClaimList
           entries={entries}
@@ -109,6 +111,7 @@ function Viz({ viz, t }: { viz: RenderViz; t: number }) {
           narrative={narrative}
         />
       </Panel>
+      </FitZone>
     );
   }
   if (viz.kind === "pipeline") {
@@ -142,6 +145,7 @@ function Viz({ viz, t }: { viz: RenderViz; t: number }) {
     // fade tightens to [0.30, 0.36] so the ring outlines the whole before the fills compose
     // it left→right (§2.5.3); containLabels adds the hard C5 containment (Path A always on).
     return (
+      <FitZone align="center">
       <Panel label={viz.caption ?? "composition"}>
         <div className="flex h-full items-center" style={{ opacity: appear(t, 0.3, 0.06) }}>
           <DecompBar
@@ -159,6 +163,7 @@ function Viz({ viz, t }: { viz: RenderViz; t: number }) {
           />
         </div>
       </Panel>
+      </FitZone>
     );
   }
   if (viz.kind === "ranges") {
@@ -205,6 +210,7 @@ function Viz({ viz, t }: { viz: RenderViz; t: number }) {
     const cell = (c?: { value: string; delta?: string; accent?: Accent }) => ({ value: c?.value ?? "", delta: c?.delta, accent: c?.accent ?? "cyan" });
     const pair = (p: [string, string] | undefined): [string, string] => [p?.[0] ?? "", p?.[1] ?? ""];
     return (
+      <FitZone align="center">
       <Panel label={viz.caption ?? "decision matrix"}>
         <div className="flex h-full items-center">
           <ComparisonMatrix
@@ -224,6 +230,7 @@ function Viz({ viz, t }: { viz: RenderViz; t: number }) {
           />
         </div>
       </Panel>
+      </FitZone>
     );
   }
   if (viz.kind === "divergence") {
@@ -271,6 +278,7 @@ function Viz({ viz, t }: { viz: RenderViz; t: number }) {
     // is a caption-only Panel (no "no data" text — §3 ruling 3). Anthropic's loose schema may
     // omit tiers/mode/items — all defended; for now `tiers` is deferred from Anthropic entirely.
     return (
+      <FitZone align="center">
       <Panel label={viz.caption ?? "ranked into tiers"}>
         <TierStack
           tiers={(viz.tiers ?? []).map((tier) => ({
@@ -283,6 +291,7 @@ function Viz({ viz, t }: { viz: RenderViz; t: number }) {
           t={t}
         />
       </Panel>
+      </FitZone>
     );
   }
   if (viz.kind === "bar") {
@@ -394,9 +403,10 @@ function Viz({ viz, t }: { viz: RenderViz; t: number }) {
     // deferred from Anthropic.
     return (
       <Panel label={viz.caption ?? "magnitude over an ordered axis"}>
-        {/* PL-0.8: bind viz to the Panel box (Donut/divergence pattern) so dense chrome can't grow the row past the frame. */}
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div className="aspect-[25/16] h-full max-h-full max-w-full">
+        {/* PL-0.8: bind viz to the Panel box, full-bleed (the scatter/candlestick/histogram pattern) —
+            the chart is row-aware and measures the TRUE row aspect; an aspect-pinned inner box would
+            lock the measured aspect to the viewBox default and disable the row-aware fill. */}
+        <div className="absolute inset-0">
           <AreaChart
             series={(viz.series ?? []).map((s) => ({
               label: s.label,
@@ -414,7 +424,6 @@ function Viz({ viz, t }: { viz: RenderViz; t: number }) {
             caption={viz.caption}
             t={t}
           />
-          </div>
         </div>
       </Panel>
     );
@@ -430,9 +439,11 @@ function Viz({ viz, t }: { viz: RenderViz; t: number }) {
     // `histogram` is deferred from Anthropic.
     return (
       <Panel label={viz.caption ?? "distribution of one metric"}>
-        {/* PL-0.8: bind viz to the Panel box (Donut/divergence pattern) so dense chrome can't grow the row past the frame. */}
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div className="aspect-[25/16] h-full max-h-full max-w-full">
+        {/* PL-0.8: bind viz to the Panel box, full-bleed (the scatter/candlestick pattern) — the chart
+            is row-aware and measures the TRUE row aspect. The old aspect-[25/16] inner box pinned the
+            measured aspect to exactly VIEW_W/VIEW_H, so the row-aware viewH could never leave 640 and
+            short square rows letterboxed the chart at a fraction of the row width. */}
+        <div className="absolute inset-0">
           <HistogramChart
             values={viz.values}
             bins={viz.bins}
@@ -449,7 +460,6 @@ function Viz({ viz, t }: { viz: RenderViz; t: number }) {
             caption={viz.caption}
             t={t}
           />
-          </div>
         </div>
       </Panel>
     );
@@ -596,9 +606,14 @@ function Viz({ viz, t }: { viz: RenderViz; t: number }) {
   // stat — a single hero number (PL-1.2: count-up + entrance pop + optional proportion
   // ring, all inside StatHero; per-element reveals supersede the old block-level fade).
   return (
-    <Panel label={viz.caption ?? "the math"}>
-      <StatHero big={viz.big} sub={viz.sub} note={viz.note} proportion={viz.proportion} t={t} />
-    </Panel>
+    // B2: hug-and-center. FitZone (h-full) fills the now-tall viz row (B1); the Panel inside sizes to its
+    // content and centers with balanced margins instead of ballooning; FitZone shrinks it only if it
+    // overflows a short frame (square StatHero). Byte-neutral at zoom 1 when the content already fits.
+    <FitZone align="center">
+      <Panel label={viz.caption ?? "the math"}>
+        <StatHero big={viz.big} sub={viz.sub} note={viz.note} proportion={viz.proportion} t={t} />
+      </Panel>
+    </FitZone>
   );
 }
 
@@ -606,6 +621,7 @@ export default function PostRenderer({ post, t = 1 }: { post: RenderPost; t?: nu
   const metrics = post.metrics?.slice(0, 4) ?? [];
   return (
     <PostFrame
+      format={post.format}
       eyebrow={post.eyebrow}
       headline={post.headline}
       visualization={<Viz viz={post.visualization} t={t} />}

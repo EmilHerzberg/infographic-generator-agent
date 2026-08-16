@@ -100,7 +100,26 @@ export type DivergencePlan = {
   pitch: number;
   /** True when, after clamping, < 2 renderable items remain (C2 self-contained fallback). */
   fallback: boolean;
+  /** Format-scaled vertical geometry the renderer must draw with (viewBox height + axis y). */
+  vgeom: DivVGeom;
 };
+
+// Format-scaled vertical geometry (the barsVGeom pattern — Emil's 9:16 feedback): every plot
+// y-coordinate + the viewBox height multiplied by `vScale` so the rows/axis SPREAD to fill the tall
+// frame instead of clustering in a 640-tall band letterboxed into the middle. Default 1 ⇒
+// portrait/square geometry byte-identical (the checks never pass it). x-geometry untouched.
+export type DivVGeom = { VIEW_H: number; ROW_Y0: number; ROW_Y1: number; AXIS_Y: number; SLOPE_Y_TOP: number; SLOPE_Y_BOTTOM: number };
+export function divVGeom(vScale = 1): DivVGeom {
+  const s = Number.isFinite(vScale) && vScale > 0 ? vScale : 1;
+  return {
+    VIEW_H: Math.round(VIEW_H * s),
+    ROW_Y0: ROW_Y0 * s,
+    ROW_Y1: ROW_Y1 * s,
+    AXIS_Y: AXIS_Y * s,
+    SLOPE_Y_TOP: SLOPE_Y_TOP * s,
+    SLOPE_Y_BOTTOM: SLOPE_Y_BOTTOM * s,
+  };
+}
 
 const clamp = (x: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, x));
 const isNum = (x: unknown): x is number => typeof x === "number" && Number.isFinite(x);
@@ -160,8 +179,10 @@ export function planDivergence(
   axisMinIn: number | undefined,
   axisMaxIn: number | undefined,
   modeIn: DivergenceMode | string | undefined,
+  vScale?: number,
 ): DivergencePlan {
   const mode: DivergenceMode = modeIn === "slope" ? "slope" : "dumbbell"; // unknown → dumbbell (§2.6.6)
+  const G = divVGeom(vScale);
 
   // 1. Clamp count (C1), then coerce endpoints (§2.6.2). An item with BOTH endpoints
   //    non-numeric is dropped (can't place it); a single non-numeric endpoint is coerced to
@@ -208,9 +229,9 @@ export function planDivergence(
   for (let i = 0; i <= TICK_COUNT; i++) ticks.push(axisMin + ((axisMax - axisMin) * i) / TICK_COUNT);
 
   if (mode === "slope") {
-    return planSlope(items, axisMin, axisMax, ticks, stagger, fallback);
+    return planSlope(items, axisMin, axisMax, ticks, stagger, fallback, G);
   }
-  return planDumbbell(items, axisMin, axisMax, ticks, stagger, fallback);
+  return planDumbbell(items, axisMin, axisMax, ticks, stagger, fallback, G);
 }
 
 type PreparedItem = {
@@ -246,23 +267,24 @@ function planDumbbell(
   ticks: number[],
   stagger: number,
   fallback: boolean,
+  G: DivVGeom,
 ): DivergencePlan {
   const value = scaleLinear().domain([axisMin, axisMax]).range([AXIS_X0, AXIS_X1]);
 
-  // Row y placement via scalePoint (even spacing, half-step padding). For the < 2-item
-  // fallback the single pair is centered vertically (the self-contained defensive net, §3.2).
+  // Row y placement via scalePoint (even spacing, half-step padding) over the FORMAT-SCALED band.
+  // For the < 2-item fallback the single pair is centered vertically (the defensive net, §3.2).
   let rowYof: (i: number) => number;
   if (items.length >= 2) {
     const point = scalePoint<string>()
       .domain(items.map((_, i) => String(i)))
-      .range([ROW_Y0, ROW_Y1])
+      .range([G.ROW_Y0, G.ROW_Y1])
       .padding(0.5);
-    rowYof = (i) => point(String(i)) ?? (ROW_Y0 + ROW_Y1) / 2;
+    rowYof = (i) => point(String(i)) ?? (G.ROW_Y0 + G.ROW_Y1) / 2;
   } else {
-    const cy = (ROW_Y0 + ROW_Y1) / 2;
+    const cy = (G.ROW_Y0 + G.ROW_Y1) / 2;
     rowYof = () => cy;
   }
-  const pitch = items.length >= 2 ? (ROW_Y1 - ROW_Y0) / (items.length - 1) : ROW_Y1 - ROW_Y0;
+  const pitch = items.length >= 2 ? (G.ROW_Y1 - G.ROW_Y0) / (items.length - 1) : G.ROW_Y1 - G.ROW_Y0;
 
   const rows: DivergenceRow[] = items.map((it, i) => {
     const aX = value(it.aNum);
@@ -337,7 +359,7 @@ function planDumbbell(
       rowStart: 0.34 + stagger * i,
     };
   });
-  return { mode: "dumbbell", axisMin, axisMax, rows, ticks, stagger, pitch, fallback };
+  return { mode: "dumbbell", axisMin, axisMax, rows, ticks, stagger, pitch, fallback, vgeom: G };
 }
 
 function planSlope(
@@ -347,9 +369,10 @@ function planSlope(
   ticks: number[],
   stagger: number,
   fallback: boolean,
+  G: DivVGeom,
 ): DivergencePlan {
-  // Vertical value scale: axisMax at the top, axisMin at the bottom.
-  const value = scaleLinear().domain([axisMin, axisMax]).range([SLOPE_Y_BOTTOM, SLOPE_Y_TOP]);
+  // Vertical value scale: axisMax at the top, axisMin at the bottom (format-scaled band).
+  const value = scaleLinear().domain([axisMin, axisMax]).range([G.SLOPE_Y_BOTTOM, G.SLOPE_Y_TOP]);
 
   const rows: DivergenceRow[] = items.map((it, i) => {
     const aY = value(it.aNum); // left endpoint y (true data y — connectors point here, undistorted)
@@ -391,14 +414,14 @@ function planSlope(
   // y-declutter (PM §3): the connector ENDPOINTS stay at the true data y (crossings/inversions
   // are never distorted) — only the LABEL y nudges. Per side: sort by y; push each subsequent
   // colliding label down by (SLOPE_DECLUTTER − gap), bounded within the axis. Pure pass.
-  declutterLabels(rows, "aLabelY");
-  declutterLabels(rows, "bLabelY");
+  declutterLabels(rows, "aLabelY", G.SLOPE_Y_BOTTOM);
+  declutterLabels(rows, "bLabelY", G.SLOPE_Y_BOTTOM);
 
-  return { mode: "slope", axisMin, axisMax, rows, ticks, stagger, pitch: 0, fallback };
+  return { mode: "slope", axisMin, axisMax, rows, ticks, stagger, pitch: 0, fallback, vgeom: G };
 }
 
 /** Deterministic vertical label de-overlap on one side — moves ONLY the label y, never the dot. */
-function declutterLabels(rows: DivergenceRow[], key: "aLabelY" | "bLabelY") {
+function declutterLabels(rows: DivergenceRow[], key: "aLabelY" | "bLabelY", yBottom: number) {
   const order = rows
     .map((r, i) => ({ i, y: r[key] }))
     .sort((p, q) => p.y - q.y);
@@ -406,7 +429,7 @@ function declutterLabels(rows: DivergenceRow[], key: "aLabelY" | "bLabelY") {
     const prev = rows[order[k - 1].i][key];
     const cur = rows[order[k].i];
     if (cur[key] - prev < SLOPE_DECLUTTER) {
-      cur[key] = Math.min(prev + SLOPE_DECLUTTER, SLOPE_Y_BOTTOM);
+      cur[key] = Math.min(prev + SLOPE_DECLUTTER, yBottom);
     }
   }
 }

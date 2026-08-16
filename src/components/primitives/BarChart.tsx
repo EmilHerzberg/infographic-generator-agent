@@ -19,12 +19,14 @@
 // inspector reads viewBox coordinates as the single deterministic system.
 // Spec: planning/primitive-library/handoffs/PL-2.1-bar-chart.md §2.5 / §2.7.
 
-import { useId } from "react";
+import { useContext, useId } from "react";
 import type { Accent } from "@/posts/renderTypes";
-import { colors, stroke } from "@/tokens/design";
+import { colors, stroke, chartVScale } from "@/tokens/design";
+import { FormatContext } from "@/components/layout/formatContext";
 import { planCountUp } from "@/lib/countup";
 import {
   planBars,
+  barsVGeom,
   barGrow,
   labelStart,
   refLineReveal,
@@ -37,16 +39,10 @@ import {
   type PlannedRect,
   type BarsPlan,
   VIEW_W,
-  VIEW_H,
   PLOT_X0_V,
   PLOT_X1_V,
-  PLOT_Y0,
-  BASELINE_Y,
-  CAT_LABEL_Y,
   PLOT_X0_H,
   PLOT_X1_H,
-  PLOT_Y0_H,
-  PLOT_Y1_H,
   LABEL_ANCHOR_X,
   VALUE_LABEL_PX,
   CAT_LABEL_PX,
@@ -93,7 +89,12 @@ export function BarChart({
   t = 1,
 }: Props) {
   const uid = useId();
-  const plan = planBars({ categories, mode, orientation, valueLabels, sort, seriesLabels, seriesAccents, axisMin, axisMax, unit, referenceLine });
+  // Vertical-fill (Emil's 9:16 feedback): stretch every plot y-coordinate + the viewBox height on the tall
+  // aspect so the bars/spacing fill the frame. The SAME vScale drives the plan (bar rects) AND the axis/label
+  // geometry below — read from FormatContext, 1 on portrait/square (byte-identical, checks never pass it).
+  const vScale = chartVScale(useContext(FormatContext));
+  const V = barsVGeom(vScale);
+  const plan = planBars({ categories, mode, orientation, valueLabels, sort, seriesLabels, seriesAccents, axisMin, axisMax, unit, referenceLine, vScale });
 
   const frameOn = clamp01((t - 0.26) / 0.08); // panel/axis/legend/category labels appear
 
@@ -103,19 +104,19 @@ export function BarChart({
 
   // viewBox px position of a value along the value axis (for gridlines + ticks).
   const span = plan.axisMax - plan.axisMin || 1;
-  const growLen = isV ? BASELINE_Y - PLOT_Y0 : plotX1 - plotX0;
+  const growLen = isV ? V.BASELINE_Y - V.PLOT_Y0 : plotX1 - plotX0;
   const valuePos = (v: number) => {
     const px = ((v - plan.axisMin) / span) * growLen;
-    return isV ? BASELINE_Y - px : plotX0 + px; // vertical: y; horizontal: x
+    return isV ? V.BASELINE_Y - px : plotX0 + px; // vertical: y; horizontal: x
   };
 
   if (plan.empty) {
-    return <svg viewBox={`0 0 ${VIEW_W} ${VIEW_H}`} className="block h-full w-full" role="img" aria-label={caption ?? "magnitude comparison"} data-bar data-bar-mode={plan.mode} data-bar-orientation={plan.orientation} data-bar-empty />;
+    return <svg viewBox={`0 0 ${VIEW_W} ${V.VIEW_H}`} className="block h-full w-full" role="img" aria-label={caption ?? "magnitude comparison"} data-bar data-bar-mode={plan.mode} data-bar-orientation={plan.orientation} data-bar-empty />;
   }
 
   return (
     <svg
-      viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
+      viewBox={`0 0 ${VIEW_W} ${V.VIEW_H}`}
       className="block h-full w-full"
       role="img"
       aria-label={caption ?? "magnitude comparison"}
@@ -127,9 +128,9 @@ export function BarChart({
       <g opacity={frameOn} data-bar-axis>
         {/* Baseline along the value=axisMin edge. */}
         {isV ? (
-          <line x1={plotX0} x2={plotX1} y1={BASELINE_Y} y2={BASELINE_Y} stroke={GRID_COLOR} strokeWidth={stroke.grid} data-bar-baseline />
+          <line x1={plotX0} x2={plotX1} y1={V.BASELINE_Y} y2={V.BASELINE_Y} stroke={GRID_COLOR} strokeWidth={stroke.grid} data-bar-baseline />
         ) : (
-          <line x1={plotX0} x2={plotX0} y1={PLOT_Y0_H} y2={PLOT_Y1_H} stroke={GRID_COLOR} strokeWidth={stroke.grid} data-bar-baseline />
+          <line x1={plotX0} x2={plotX0} y1={V.PLOT_Y0_H} y2={V.PLOT_Y1_H} stroke={GRID_COLOR} strokeWidth={stroke.grid} data-bar-baseline />
         )}
         {plan.ticks.map((tick, i) => {
           const p = valuePos(tick);
@@ -147,8 +148,8 @@ export function BarChart({
           const tickAnchor = i === 0 ? "start" : i === plan.ticks.length - 1 ? "end" : "middle";
           return (
             <g key={`${uid}-tick-${i}`} data-bar-tick={i}>
-              <line x1={p} x2={p} y1={PLOT_Y0_H} y2={PLOT_Y1_H} stroke={GRID_COLOR} strokeWidth={stroke.grid} opacity={i === 0 ? 1 : 0.5} />
-              <text x={p} y={PLOT_Y1_H + 28} textAnchor={tickAnchor} fill={colors.text.tertiary} fontFamily="'JetBrains Mono', monospace" fontSize={CAT_LABEL_PX} letterSpacing="0.04em">
+              <line x1={p} x2={p} y1={V.PLOT_Y0_H} y2={V.PLOT_Y1_H} stroke={GRID_COLOR} strokeWidth={stroke.grid} opacity={i === 0 ? 1 : 0.5} />
+              <text x={p} y={V.PLOT_Y1_H + 28} textAnchor={tickAnchor} fill={colors.text.tertiary} fontFamily="'JetBrains Mono', monospace" fontSize={CAT_LABEL_PX} letterSpacing="0.04em">
                 {formatTick(tick, plan.unit)}
               </text>
             </g>
@@ -176,7 +177,7 @@ export function BarChart({
 
       {/* Bars. */}
       {plan.bars.map((bar) => (
-        <BarGroup key={`${uid}-b${bar.catIndex}`} bar={bar} plan={plan} isV={isV} t={t} frameOn={frameOn} />
+        <BarGroup key={`${uid}-b${bar.catIndex}`} bar={bar} plan={plan} isV={isV} t={t} frameOn={frameOn} baselineY={V.BASELINE_Y} catLabelY={V.CAT_LABEL_Y} />
       ))}
 
       {/* Reference line (PL-4.2 knob #1) — NEUTRAL dashed threshold drawn ON TOP, fading in AFTER the
@@ -216,14 +217,14 @@ export function BarChart({
 }
 
 // ── A category's bar(s) ─────────────────────────────────────────────────────────────────────
-function BarGroup({ bar, plan, isV, t, frameOn }: { bar: PlannedBar; plan: BarsPlan; isV: boolean; t: number; frameOn: number }) {
+function BarGroup({ bar, plan, isV, t, frameOn, baselineY, catLabelY }: { bar: PlannedBar; plan: BarsPlan; isV: boolean; t: number; frameOn: number; baselineY: number; catLabelY: number }) {
   const grow = barGrow(t, bar.barStart);
   const settled = grow >= 1;
 
-  // Baseline-anchored grow transform (§3 ruling 1). Vertical: scale Y about BASELINE_Y. Horizontal:
+  // Baseline-anchored grow transform (§3 ruling 1). Vertical: scale Y about the (scaled) baseline. Horizontal:
   // scale X about PLOT_X0_H. OMITTED entirely at settle (never scale(1)). CSS style.transform so
   // getComputedStyle().transform returns a matrix the gate's parseMatrix reads.
-  const anchor = isV ? BASELINE_Y : PLOT_X0_H;
+  const anchor = isV ? baselineY : PLOT_X0_H;
   const transform = settled
     ? undefined
     : isV
@@ -270,7 +271,7 @@ function BarGroup({ bar, plan, isV, t, frameOn }: { bar: PlannedBar; plan: BarsP
         (isV ? (
           <text
             x={bandCenterCross}
-            y={CAT_LABEL_Y + CAT_LABEL_PX}
+            y={catLabelY + CAT_LABEL_PX}
             textAnchor="middle"
             fill={colors.text.primary}
             fontFamily="'Space Grotesk', sans-serif"

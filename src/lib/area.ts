@@ -33,6 +33,16 @@ export const BASELINE_Y = 560; // value baseline (axisMin=0); fill grows UP to h
 export const X_LABEL_Y = 564; // x labels live in [564, 600] (REUSE bars CAT_LABEL_Y band)
 export const GROW_HEIGHT = BASELINE_Y - PLOT_Y0; // 490
 
+// Vertical-fill scaled geometry (Emil's 9:16 feedback; mirrors bars.ts `barsVGeom`). Every plot
+// y-coordinate + the viewBox height multiplied by `vScale` (1 = the source 640-tall reference), so the
+// area fills the tall frame. The component derives its own axis/label y from the SAME helper. x untouched.
+// Default 1 ⇒ portrait/square + every deterministic check (which never passes a scale) stay byte-identical.
+export type AreaVGeom = { VIEW_H: number; PLOT_Y0: number; BASELINE_Y: number; X_LABEL_Y: number; GROW_HEIGHT: number };
+export function areaVGeom(vScale = 1): AreaVGeom {
+  const s = Number.isFinite(vScale) && vScale > 0 ? vScale : 1;
+  return { VIEW_H: Math.round(VIEW_H * s), PLOT_Y0: PLOT_Y0 * s, BASELINE_Y: BASELINE_Y * s, X_LABEL_Y: X_LABEL_Y * s, GROW_HEIGHT: GROW_HEIGHT * s };
+}
+
 export const MAX_SERIES = 3; // C1 — stacked bands get muddy fast; 3 accent-mapped layers is the ceiling
 export const MAX_POINTS = 24; // C2 — x resolution; >24 reads as noise at mobile scale
 export const TICK_COUNT = 4; // C3 — 5 gridlines incl. baseline (REUSE bars)
@@ -85,6 +95,29 @@ export const ANN_FADE_DUR = 0.06; // annotations fade over [EDGE_END, EDGE_END +
 const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
 const isNum = (x: unknown): x is number => typeof x === "number" && Number.isFinite(x);
 
+// ── PL-0.8 row-aware bounds (the histogram/scatter/candlestick pattern) ─────────────────────────
+// The renderer measures its row's px aspect and passes `viewH` so the viewBox aspect MATCHES the row
+// and the SVG fills the FULL row width (a fixed 640-high box letterboxes into a short square row at a
+// fraction of the width — Emil's format-bench feedback). The vScale-stretched geometry (areaVGeom) is
+// the CEILING: vertical's tall rows keep the approved stretched fill byte-identically; only SHORTER
+// rows compress the grow band (top air + the x-label band stay fixed px). viewH omitted or ≥ ceiling
+// → areaVGeom verbatim (byte-identical; the check suites pass none).
+export const MIN_VIEW_H = 320;
+export function areaBounds(vScale = 1, viewH?: number): AreaVGeom {
+  const AV = areaVGeom(vScale);
+  if (!isNum(viewH)) return AV;
+  const vH = Math.round(Math.max(MIN_VIEW_H, Math.min(AV.VIEW_H, viewH)));
+  if (vH >= AV.VIEW_H) return AV;
+  const baseline = vH - (AV.VIEW_H - AV.BASELINE_Y);
+  return {
+    VIEW_H: vH,
+    PLOT_Y0: AV.PLOT_Y0,
+    BASELINE_Y: baseline,
+    X_LABEL_Y: baseline + (AV.X_LABEL_Y - AV.BASELINE_Y),
+    GROW_HEIGHT: baseline - AV.PLOT_Y0,
+  };
+}
+
 // estW() is calibrated at 26px (stack.ts). X-labels render at AXIS_LABEL_PX → scale the estimate.
 // (End labels are fit by codepoint cap + gutter collision, not estW width, so no end-label scale.)
 const EST_SCALE_X = AXIS_LABEL_PX / 26;
@@ -104,6 +137,9 @@ export type PlanAreaInput = {
   axisMax?: number;
   unit?: string;
   annotations?: { seriesIndex?: number; x?: number | string; label?: string }[]; // PL-4.2 — ≤3 callouts
+  vScale?: number; // vertical-fill scale (default 1 → byte-identical); see areaVGeom
+  /** PL-0.8 — row-aware viewBox height (renderer-measured). Omitted → the vScale ceiling. */
+  viewH?: number;
 };
 
 export type Pt = { x: number; y: number }; // normalized viewBox space
@@ -153,6 +189,7 @@ export type AreaPlan = {
   legend: { label: string; accentKey: AccentKey }[];
   valueLabels: "auto" | "off";
   annotations: PlannedAreaAnnotation[]; // PL-4.2 — [] when absent (byte-identical default)
+  vgeom: AreaVGeom; // the EFFECTIVE (vScale + row-aware) bounds the renderer must draw with
   dropped: {
     seriesDropped: number;
     pointsDropped: number;
@@ -216,6 +253,8 @@ export function planArea(input: PlanAreaInput): AreaPlan {
   const mode: AreaMode = input.mode === "stacked" ? "stacked" : "simple";
   const valueLabels: "auto" | "off" = input.valueLabels === "off" ? "off" : "auto";
   const unit = typeof input.unit === "string" ? input.unit : "";
+  // Vertical-fill scaled + row-aware geometry (defaults → byte-identical). Used for EVERY plot y below.
+  const AV = areaBounds(input.vScale, input.viewH);
 
   const dropped = {
     seriesDropped: 0,
@@ -251,6 +290,7 @@ export function planArea(input: PlanAreaInput): AreaPlan {
     legend: [],
     valueLabels,
     annotations: [],
+    vgeom: AV,
     dropped,
     empty: true,
     singlePoint: false,
@@ -311,11 +351,11 @@ export function planArea(input: PlanAreaInput): AreaPlan {
   // 7. Scales. x over the index domain [0, commonLen-1]; y (linear) over [axisMin, axisMax].
   const lastIdx = Math.max(1, commonLen - 1); // span || 1 — a single point would give 0 width
   const xScale = scaleLinear().domain([0, lastIdx]).range([PLOT_X0, PLOT_X1]);
-  const yScale = scaleLinear().domain([axisMin, axisMax]).range([BASELINE_Y, PLOT_Y0]);
+  const yScale = scaleLinear().domain([axisMin, axisMax]).range([AV.BASELINE_Y, AV.PLOT_Y0]);
   const xAt = (i: number): number => xScale(i) ?? PLOT_X0;
   const yAt = (v: number): number => {
     const clamped = Math.max(axisMin, Math.min(axisMax, v));
-    return yScale(clamped) ?? BASELINE_Y;
+    return yScale(clamped) ?? AV.BASELINE_Y;
   };
 
   // 8. Manual stacked cumulative sums → per-series upper/lower edge points (normalized viewBox space).
@@ -428,7 +468,7 @@ export function planArea(input: PlanAreaInput): AreaPlan {
   survivors.forEach((b, i) => {
     const ps = plannedSeries[i];
     const text = b.norm.endValueLabel != null ? b.norm.endValueLabel : formatValue(b.norm.values[lastX] ?? 0, unit);
-    const yAnchor = ps.upper[ps.upper.length - 1]?.y ?? BASELINE_Y;
+    const yAnchor = ps.upper[ps.upper.length - 1]?.y ?? AV.BASELINE_Y;
     let hideReason: EndLabel["hideReason"];
     if (valueLabels === "off") hideReason = "off";
     else if (text.trim().length === 0) hideReason = "empty";
@@ -481,13 +521,13 @@ export function planArea(input: PlanAreaInput): AreaPlan {
   type Box = { x: number; y: number; w: number; h: number };
   const annotations: PlannedAreaAnnotation[] = [];
   const rawAnns = Array.isArray(input.annotations) ? input.annotations : [];
-  const topZone = PLOT_Y0 + GROW_HEIGHT * 0.2;
+  const topZone = AV.PLOT_Y0 + AV.GROW_HEIGHT * 0.2;
   const shownBoxes: Box[] = [];
   // Seed with the SHOWN end-label boxes so callouts avoid the right value gutter. Use the renderer's
   // painted-y clamp (AreaChart EndLabel) so the avoid-box matches what is actually drawn.
   for (const ps of plannedSeries) {
     if (!ps.endLabel.show) continue;
-    const yPainted = Math.max(PLOT_Y0 + END_LABEL_PX, Math.min(ps.endLabel.y + 9, BASELINE_Y - 4));
+    const yPainted = Math.max(AV.PLOT_Y0 + END_LABEL_PX, Math.min(ps.endLabel.y + 9, AV.BASELINE_Y - 4));
     shownBoxes.push({ x: END_X - 80, y: yPainted - END_LABEL_PX, w: 80, h: END_LABEL_PX + 8 });
   }
 
@@ -513,18 +553,30 @@ export function planArea(input: PlanAreaInput): AreaPlan {
     let seriesIndex = isNum(a?.seriesIndex) ? Math.trunc(a.seriesIndex as number) : 0;
     if (seriesIndex < 0 || seriesIndex >= plannedSeries.length) seriesIndex = 0;
     const ps = plannedSeries[seriesIndex];
-    const anchor: Pt = ps.upper[vertexIndex] ?? ps.upper[ps.upper.length - 1] ?? { x: xs[0] ?? PLOT_X0, y: BASELINE_Y };
+    const anchor: Pt = ps.upper[vertexIndex] ?? ps.upper[ps.upper.length - 1] ?? { x: xs[0] ?? PLOT_X0, y: AV.BASELINE_Y };
     resolvedAnn++;
 
     const text = typeof a?.label === "string" ? a.label.trim() : "";
-    const below = anchor.y <= topZone; // anchor near the top → place the box BELOW (into open plot)
-    const labelY = below ? anchor.y + ANN_OFFSET : anchor.y - ANN_OFFSET;
+    // STACKED: the label must clear the whole ENVELOPE (the TOP layer's upper edge) at that x, not
+    // just its own band's edge — a mid-band anchor otherwise puts the text ON the fill stacked above
+    // it, half-hidden (Emil's format-bench feedback). Simple mode / top-layer anchor: envY == anchor.y
+    // → byte-identical placement.
+    const topLayer = plannedSeries[plannedSeries.length - 1];
+    const envY = mode === "stacked" ? Math.min(anchor.y, topLayer.upper[vertexIndex]?.y ?? anchor.y) : anchor.y;
+    // Envelope near the top → place the box BELOW (into open plot). ALSO fall back to below when the
+    // above-box would spill past the plot top (compressed short rows: the fixed 80px reservation can
+    // exceed the shrunken headroom) — showing below beats silently hiding the author's callout.
+    const below = envY <= topZone || envY - ANN_OFFSET - ANN_LABEL_PX < AV.PLOT_Y0;
+    const labelY = below ? anchor.y + ANN_OFFSET : envY - ANN_OFFSET;
     const leader = { x1: anchor.x, y1: anchor.y, x2: anchor.x, y2: labelY + (below ? -ANN_LABEL_PX : 6) };
     const est = estAnnPx(text);
     const halfW = est / 2;
-    // Keep the label box inside the plot horizontally — anchor "middle", clamp the center.
-    const cx = Math.max(PLOT_X0 + halfW, Math.min(PLOT_X1 - halfW, anchor.x));
-    const box: Box = { x: cx - halfW, y: labelY - ANN_LABEL_PX, w: est, h: ANN_LABEL_PX + 6 };
+    // Keep the label box inside the plot horizontally — anchor "middle", clamp the center. HALO_PAD
+    // reserves the renderer's paint-order halo (stroke 7 → ~3.5px beyond the glyphs each side) so the
+    // PAINTED extent stays inside the plot/gutter bounds the checks measure, not just the glyphs.
+    const HALO_PAD = 4;
+    const cx = Math.max(PLOT_X0 + halfW + HALO_PAD, Math.min(PLOT_X1 - halfW - HALO_PAD, anchor.x));
+    const box: Box = { x: cx - halfW - HALO_PAD, y: labelY - ANN_LABEL_PX, w: est + HALO_PAD * 2, h: ANN_LABEL_PX + 6 };
 
     let show = text.length > 0;
     let hideReason: string | undefined;
@@ -532,7 +584,7 @@ export function planArea(input: PlanAreaInput): AreaPlan {
     else if ([...text].length > ANN_LABEL_MAX_CP) {
       show = false;
       hideReason = "tooLong";
-    } else if (box.y < PLOT_Y0 || box.y + box.h > BASELINE_Y) {
+    } else if (box.y < AV.PLOT_Y0 || box.y + box.h > AV.BASELINE_Y) {
       // keep the callout strictly inside the plot frame (above the x-label band, below the plot top).
       show = false;
       hideReason = "spill";
@@ -565,6 +617,7 @@ export function planArea(input: PlanAreaInput): AreaPlan {
     legend,
     valueLabels,
     annotations,
+    vgeom: AV,
     dropped,
     empty: false,
     singlePoint,

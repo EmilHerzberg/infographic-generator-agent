@@ -9,7 +9,7 @@
 import { writeFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { generateObject, jsonSchema, NoObjectGeneratedError } from "ai";
-import { resolveModel } from "./model.mjs";
+import { resolveModel, llmCallSignal } from "./model.mjs";
 import { assembleBriefing } from "./context.mjs";
 import { loadRenderSchema, schemaForProvider } from "./render-schema.mjs";
 import { runQA, findingsForAgent } from "./qa.mjs";
@@ -185,8 +185,12 @@ function stripNulls(v) {
  *   qa?:object, iterations:number, tokens:number, rendererFindings?:object[]}>}
  *   (Epic 02 will add 'triage_rejected'.)
  */
-export async function generatePost({ brief, provider, model: modelId, apiKey, root, id, base, vizKinds, opts = {} }) {
+export async function generatePost({ brief, provider, model: modelId, apiKey, root, id, base, vizKinds, format, opts = {} }) {
   const maxIter = opts.maxIter ?? 4;
+  // Output aspect the user chose (portrait default). NOT model-authored — never in the generation
+  // schema — so we STAMP it onto the generated spec below. That written spec drives the QA canvas size
+  // (Preview reads it) AND the render size (Remotion reads it), keeping QA honest at the true format.
+  const fmt = format === "square" || format === "vertical" ? format : undefined; // non-default aspects; else absent = portrait
   const tokenBudget = opts.tokenBudget ?? 220000;
   const judge = opts.judge ?? true;
   const vision = !!opts.vision;
@@ -225,7 +229,7 @@ export async function generatePost({ brief, provider, model: modelId, apiKey, ro
     log(`iteration ${iter}/${maxIter}: generating${feedback ? " (revision)" : ""}...`);
     let object, usage;
     try {
-      ({ object, usage } = await generateObject({ model, schema: jsonSchema(schema), system, prompt, maxRetries: 2 }));
+      ({ object, usage } = await generateObject({ model, schema: jsonSchema(schema), system, prompt, maxRetries: 2, abortSignal: llmCallSignal() }));
     } catch (err) {
       if (NoObjectGeneratedError.isInstance(err) && err.text) {
         await writeFile(join(outDir, `${id}.raw.txt`), err.text);
@@ -235,6 +239,7 @@ export async function generatePost({ brief, provider, model: modelId, apiKey, ro
     }
     object = stripNulls(object);
     object.id = id;
+    if (fmt) object.format = fmt; // stamp the chosen output aspect (absent ⇒ portrait, byte-identical)
     lastSpec = object;
     tokens += tokensOf(usage);
     await writeFile(outPath, JSON.stringify(object, null, 2));

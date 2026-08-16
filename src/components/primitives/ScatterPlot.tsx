@@ -357,9 +357,9 @@ function ScatterDot({ pt, t }: { pt: PlannedPoint; t: number }) {
       </g>
       {pt.showLabel && (
         <text
-          x={pt.cx + DOT_R + 6}
+          x={pt.labelSide === "left" ? pt.cx - DOT_R - 6 : pt.cx + DOT_R + 6}
           y={pt.cy + POINT_LABEL_PX / 2 - 4}
-          textAnchor="start"
+          textAnchor={pt.labelSide === "left" ? "end" : "start"}
           fill={colors.text.primary}
           fontFamily="'Space Grotesk', sans-serif"
           fontSize={POINT_LABEL_PX}

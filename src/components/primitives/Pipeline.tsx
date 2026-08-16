@@ -18,15 +18,17 @@
 //   signal dot:       r9 cyan, on the track centerline; hidden once arrived (signalProgress ≥ 0.998)
 //   endpoint:         endLabel 72px right-anchored + END-TO-END eyebrow
 
-import { useId } from "react";
+import { useContext, useId } from "react";
 import type { AccentKey } from "@/content/schema";
-import { colors, stroke, text } from "@/tokens/design";
+import { colors, stroke, text, resolveFormat } from "@/tokens/design";
+import { FormatContext } from "@/components/layout/formatContext";
 import {
   planPipeline,
   nodeOpacity,
   cumulativeOpacity,
   signalX as signalXOf,
 } from "@/lib/pipeline";
+import { appear } from "@/lib/reveal";
 
 const accentToColor: Record<AccentKey, string> = {
   cyan: colors.accent.cyan,
@@ -49,6 +51,8 @@ type Props = {
   nodesReveal?: number;
   signalProgress?: number;
   endpointReveal?: number;
+  /** Global progress 0..1 — fills any OMITTED reveal prop via the standard schedule (so Path B can just pass t). Explicit props win. */
+  t?: number;
   caption?: string;
 };
 
@@ -57,11 +61,17 @@ export function Pipeline({
   perStepLabel,
   endLabel,
   endAccent = "cyan",
-  nodesReveal = 1,
-  signalProgress = 1,
-  endpointReveal = 1,
+  nodesReveal: nodesRevealProp,
+  signalProgress: signalProgressProp,
+  endpointReveal: endpointRevealProp,
+  t = 1,
   caption,
 }: Props) {
+  // Strategy A t-fallback: an omitted reveal prop derives from the global t via the SAME appear(t,start,dur) schedule PostRenderer passes explicitly; explicit props override (byte-identical for Path A), and at the default t=1 every fallback is exactly 1 (settled — backward compatible).
+  const nodesReveal = nodesRevealProp ?? appear(t, 0.2, 0.3);
+  const signalProgress = signalProgressProp ?? appear(t, 0.4, 0.45);
+  const endpointReveal = endpointRevealProp ?? appear(t, 0.7, 0.2);
+
   const uid = useId();
 
   // The pure brain — node layout, the MAX_NODES cap, the signal-dot path, all decided ONCE, from DATA
@@ -78,6 +88,171 @@ export function Pipeline({
 
   const accentColor = accentToColor[plan.endAccent];
   const signalColor = colors.accent.cyan;
+
+  // 9:16 (Emil's format-bench feedback): the horizontal 1000×280 chain letterboxes into a thin band
+  // on a tall frame. Render TOP-DOWN instead — bigger chips stacked down the frame, each cumulative
+  // label BESIDE its chip, the signal travelling vertically, the endpoint landing at the bottom.
+  // Same plan, same reveal drivers (opacity/color only) — orientation is paint-time geometry.
+  if (resolveFormat(useContext(FormatContext)) === "vertical") {
+    const W = 640;
+    const H = 1000;
+    const chip = 76;
+    const chipX = 128;
+    const trackX = chipX + chip / 2;
+    const y0 = 116;
+    const y1 = 828;
+    const cyOf = (i: number) => (N >= 2 ? y0 + (i / (N - 1)) * (y1 - y0) : (y0 + y1) / 2);
+    // Mirror the horizontal signalX semantics: sweep between the FIRST and LAST chip centers, so a
+    // degenerate 1-node track keeps the dot ON the lone chip (cyOf collapses to a constant).
+    const signalYPos = cyOf(0) + Math.max(0, Math.min(1, signalProgress)) * (cyOf(N - 1) - cyOf(0));
+    return (
+      <svg
+        data-pipeline=""
+        data-pipeline-orientation="vertical"
+        viewBox={`0 0 ${W} ${H}`}
+        className="block h-full w-full"
+        preserveAspectRatio="xMidYMid meet"
+        role="img"
+        aria-label={caption ?? "workflow pipeline"}
+      >
+        {/* The 640-wide viewBox holds ~26 tracked mono chars; a longer per-step label COMPRESSES to
+            the line budget via textLength (spacingAndGlyphs) instead of overflowing the right margin.
+            Worst realistic compression stays above the 18px effective floor at the 952/640 CSS scale. */}
+        {(() => {
+          const maxW = W - chipX - 40;
+          const est = plan.perStepLabel.length * text.axisLabel * 0.87;
+          return (
+            <text
+              data-pipeline-perstep=""
+              x={chipX}
+              y={52}
+              fill={colors.text.tertiary}
+              fontFamily="'JetBrains Mono', monospace"
+              fontSize={text.axisLabel}
+              letterSpacing="0.22em"
+              {...(est > maxW ? { textLength: maxW, lengthAdjust: "spacingAndGlyphs" as const } : {})}
+            >
+              {plan.perStepLabel}
+            </text>
+          );
+        })()}
+
+        {Array.from({ length: N - 1 }).map((_, i) => {
+          const yA = cyOf(i) + chip / 2;
+          const yB = cyOf(i + 1) - chip / 2;
+          const visible = nodeOpacity(nodesReveal, i + 1, N);
+          const passed = Math.max(0, Math.min(1, signalProgress * N - (i + 0.5)));
+          return (
+            <g key={`${uid}-conn-${i}`} opacity={visible} data-pipeline-connector={i}>
+              <line x1={trackX} x2={trackX} y1={yA} y2={yB} stroke="rgba(184,178,167,0.18)" strokeWidth={stroke.signal} strokeLinecap="round" />
+              <line
+                x1={trackX}
+                x2={trackX}
+                y1={yA}
+                y2={yA + (yB - yA) * passed}
+                stroke={signalColor}
+                strokeWidth={stroke.signal}
+                strokeLinecap="round"
+                opacity={passed > 0 ? 0.9 : 0}
+                style={passed > 0 ? { filter: `drop-shadow(0 0 6px ${signalColor}55)` } : undefined}
+              />
+            </g>
+          );
+        })}
+
+        {nodes.map((nd, i) => {
+          const cy = cyOf(i);
+          const op = nodeOpacity(nodesReveal, i, N);
+          const cumOp = cumulativeOpacity(signalProgress, i, N);
+          const isPassed = signalProgress >= nd.passedThreshold;
+          return (
+            <g key={`${uid}-node-${i}`} opacity={op} data-pipeline-node={i}>
+              <rect
+                data-pipeline-chip={i}
+                x={chipX}
+                y={cy - chip / 2}
+                width={chip}
+                height={chip}
+                rx={14}
+                fill="#202735"
+                stroke={isPassed ? signalColor : "rgba(184,178,167,0.20)"}
+                strokeWidth={2}
+                style={isPassed ? { filter: `drop-shadow(0 0 10px ${signalColor}55)` } : undefined}
+              />
+              <text
+                data-pipeline-step={i}
+                x={chipX + chip / 2}
+                y={cy + 9}
+                textAnchor="middle"
+                fill={isPassed ? colors.text.primary : colors.text.secondary}
+                fontFamily="'JetBrains Mono', monospace"
+                fontSize={26}
+                fontWeight={500}
+                letterSpacing="0.04em"
+              >
+                {String(nd.step).padStart(2, "0")}
+              </text>
+              <text
+                data-pipeline-cumulative={i}
+                x={chipX + chip + 36}
+                y={cy + 10}
+                textAnchor="start"
+                fill={colors.text.secondary}
+                fontFamily="'Space Grotesk', sans-serif"
+                fontWeight={600}
+                fontSize={28}
+                opacity={cumOp}
+                letterSpacing="-0.01em"
+              >
+                {nd.cumulativeLabel}
+              </text>
+            </g>
+          );
+        })}
+
+        {nodesReveal > 0.95 && signalProgress > 0.002 && signalProgress < 0.998 && (
+          <circle
+            data-pipeline-signal=""
+            cx={trackX}
+            cy={signalYPos}
+            r={10}
+            fill={signalColor}
+            style={{ filter: `drop-shadow(0 0 14px ${signalColor})` }}
+          />
+        )}
+
+        <g opacity={endpointReveal} data-pipeline-endpoint="">
+          {/* endLabel descender vs eyebrow cap height need ≥ 12px air — y H−66/H−8 keeps ~16px
+              (H−52/H−12 collided by ~7px on the formats gate). */}
+          <text
+            data-pipeline-endlabel=""
+            x={W - 40}
+            y={H - 66}
+            textAnchor="end"
+            fill={accentColor}
+            fontFamily="'Space Grotesk', sans-serif"
+            fontWeight={700}
+            fontSize={endLabelFontSize}
+            letterSpacing="-0.02em"
+            style={{ filter: `drop-shadow(0 0 16px ${accentColor}55)` }}
+          >
+            {plan.endLabel}
+          </text>
+          <text
+            x={W - 40}
+            y={H - 8}
+            textAnchor="end"
+            fill={colors.text.tertiary}
+            fontFamily="'JetBrains Mono', monospace"
+            fontSize={text.axisLabel}
+            letterSpacing="0.22em"
+          >
+            END-TO-END
+          </text>
+        </g>
+      </svg>
+    );
+  }
 
   return (
     <svg

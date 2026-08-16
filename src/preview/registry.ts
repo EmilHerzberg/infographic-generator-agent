@@ -1,47 +1,47 @@
-// Maps a preview id -> a still-renderable post component. Used by the /preview
-// route so Playwright (the structural inspector) and the agent harness can render
-// any post at 1080x1350 by URL.
+// Maps a preview id -> a LAZY loader for its post component + declared format. Used by the /preview
+// route (Playwright inspector + the agent harness) to render any post at its format by URL.
 //
-// Static posts are registered explicitly. Agent/Path-B generated posts in
-// src/posts/generated/*.tsx (default export) are auto-discovered via Vite glob.
+// LAZY on purpose: the corpus is ~170 fixtures (14 Path-B TSX + ~155 Path-A specs incl. the fuzz/density
+// QA corpus). Eager-globbing them all made EVERY page load (even the user app — main.tsx statically imports
+// Preview) evaluate ~170 modules, which (a) bloats the bundle and (b) accumulates enough Chromium renderer
+// state that after ~20 heavy same-page QA navigations the page hangs (#post-canvas stops re-rendering) — the
+// gate-suite flake. Loading only the requested fixture per page keeps each load ~30 modules, so the flake and
+// the bloat both disappear. Keys are filename-derived (fuzz spec ids == their filenames — verified).
 import { createElement, type ComponentType } from "react";
-import { AIPredictionGraveyardPost } from "@/posts/AIPredictionGraveyard";
 import PostRenderer from "@/posts/PostRenderer";
 import type { RenderPost } from "@/posts/renderTypes";
+import type { FormatKey } from "@/tokens/design";
 
-export const registry: Record<string, { Component: ComponentType }> = {
-  "ai-prediction-graveyard": { Component: AIPredictionGraveyardPost },
+// A resolved post: the component to render and (Path A) its declared output format for canvas sizing.
+// `Component` is loosely typed (static posts take their own props, not `t`); Preview casts when rendering.
+export type RegistryEntry = { Component: ComponentType; format?: FormatKey };
+
+// id -> async loader. The loader pulls only that fixture's module(s) on demand.
+export const registry: Record<string, () => Promise<RegistryEntry>> = {
+  "ai-prediction-graveyard": async () => ({
+    Component: (await import("@/posts/AIPredictionGraveyard")).AIPredictionGraveyardPost,
+  }),
 };
 
-// Path B — agent-generated TSX components.
-const generated = import.meta.glob<{ default: ComponentType }>("../posts/generated/*.tsx", {
-  eager: true,
-});
-for (const [path, mod] of Object.entries(generated)) {
+// Path B — agent-generated TSX components (default export). Lazy per id.
+const generated = import.meta.glob<{ default: ComponentType }>("../posts/generated/*.tsx");
+for (const [path, load] of Object.entries(generated)) {
   const id = path.split("/").pop()!.replace(/\.tsx$/, "");
-  if (mod.default) registry[id] = { Component: mod.default };
+  registry[id] = async () => ({ Component: (await load()).default });
 }
 
-// Path A — JSON render-specs rendered by the fixed PostRenderer.
-const renderSpecs = import.meta.glob<{ default: RenderPost }>("../posts/generated/*.render.json", {
-  eager: true,
-});
-for (const [path, mod] of Object.entries(renderSpecs)) {
+// Path A — JSON render-specs (shipped generated set + the fuzz/density QA corpus), rendered by PostRenderer.
+const specs = import.meta.glob<{ default: RenderPost }>([
+  "../posts/generated/*.render.json",
+  "../../planning/fixtures/renderfuzz/*.render.json",
+  "../../planning/fixtures/density/*.render.json",
+]);
+for (const [path, load] of Object.entries(specs)) {
   const id = path.split("/").pop()!.replace(/\.render\.json$/, "");
-  const post = mod.default;
-  registry[id] = { Component: (props: { t?: number }) => createElement(PostRenderer, { post, t: props?.t }) };
+  registry[id] = async () => {
+    const post = (await load()).default;
+    return { Component: (props: { t?: number }) => createElement(PostRenderer, { post, t: props?.t }), format: post.format };
+  };
 }
 
-// Renderer fuzz corpus (Epic 01 / Sprint 1.1) — coverage specs that stress the
-// no-overflow guarantee. Registered under each spec's own `id` ("fuzz-..."), so
-// `npm run qa:fuzz` can inspect every one by URL. Not part of the shipped post set.
-// PL-1.3 also registers the density set (planning/fixtures/density/) — density-06
-// is part of the DecompBar t=1 regression corpus (tools/qa-decompbar.mjs).
-const fuzzSpecs = import.meta.glob<{ default: RenderPost }>(
-  ["../../planning/fixtures/renderfuzz/*.render.json", "../../planning/fixtures/density/*.render.json"],
-  { eager: true },
-);
-for (const mod of Object.values(fuzzSpecs)) {
-  const post = mod.default;
-  registry[post.id] = { Component: (props: { t?: number }) => createElement(PostRenderer, { post, t: props?.t }) };
-}
+export const knownIds = () => Object.keys(registry);

@@ -13,7 +13,7 @@ import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { generateObject, jsonSchema, NoObjectGeneratedError } from "ai";
-import { resolveModel, providerNames } from "./lib/model.mjs";
+import { resolveModel, providerNames, llmCallSignal, genLoopSignal } from "./lib/model.mjs";
 import { assembleBriefing } from "./lib/context.mjs";
 import { loadRenderSchema, schemaForProvider } from "./lib/render-schema.mjs";
 import { formatFindings } from "./lib/qa.mjs";
@@ -59,7 +59,7 @@ async function runOnce({ provider, modelId, id, brief }) {
   await mkdir(outDir, { recursive: true });
   const outPath = join(outDir, `${id}.render.json`);
   try {
-    const { object } = await generateObject({ model, schema: jsonSchema(schema), system, prompt: brief, maxRetries: 2 });
+    const { object } = await generateObject({ model, schema: jsonSchema(schema), system, prompt: brief, maxRetries: 2, abortSignal: llmCallSignal() });
     object.id = id;
     await writeFile(outPath, JSON.stringify(object, null, 2));
     console.error(`✔ wrote ${outPath} (single-shot, no gate). QA it: npm run qa -- ${id}`);
@@ -77,7 +77,7 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (!args.provider || !args.brief) {
     console.error(`Usage: node tools/render.mjs --provider <${providerNames().join("|")}> --brief "..." [--id my-post]`);
-    console.error(`  flags: --once (single-shot, no gate) --vision --no-judge --max-iter N --token-budget N --motion --base URL`);
+    console.error(`  flags: --once (single-shot, no gate) --vision --no-judge --max-iter N --token-budget N --motion --base URL --format portrait|square|vertical`);
     process.exit(1);
   }
   try {
@@ -114,7 +114,7 @@ async function main() {
     ` (judge=${opts.judge}, vision=${opts.vision}, motion=${opts.motion}${vizKinds ? `, kinds=${vizKinds.join(",")}` : ""})...`);
   const t0 = Date.now();
   // CLI use: apiKey omitted → the service falls back to the provider's env key.
-  const res = await generatePost({ brief: args.brief, provider: args.provider, model: args.model, root: ROOT, id, base, vizKinds, opts });
+  const res = await generatePost({ brief: args.brief, provider: args.provider, model: args.model, root: ROOT, id, base, vizKinds, format: args.format, opts });
   const secs = ((Date.now() - t0) / 1000).toFixed(1);
 
   if (res.status === "ok") {

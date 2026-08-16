@@ -55,6 +55,15 @@ export const ROW_Y0 = 80;
 export const ROW_Y1 = 660;
 export const BAND_H = 76; // painted stage-band height (source px → ~68.7px effective)
 
+// Vertical-fill (Emil's format-bench feedback — the divergence divVGeom pattern): stretch the band
+// area, band heights and the viewBox height on the tall aspect so the funnel FILLS the 9:16 mid
+// zone instead of clustering mid-band. Default 1 ⇒ portrait/square byte-identical (checks pass none).
+export type FunnelVGeom = { VIEW_H: number; ROW_Y0: number; ROW_Y1: number; BAND_H: number };
+export function funnelVGeom(vScale = 1): FunnelVGeom {
+  const s = Number.isFinite(vScale) && vScale > 0 ? vScale : 1;
+  return { VIEW_H: Math.round(VIEW_H * s), ROW_Y0: ROW_Y0 * s, ROW_Y1: ROW_Y1 * s, BAND_H: Math.round(BAND_H * s) };
+}
+
 // C8 — band corner radius + chart-line weight (the established chart weight, where stroked).
 export const BAND_RADIUS = 8;
 export const TAPER_OPACITY = 0.1; // taper-wall fill-only opacity (connective tissue)
@@ -63,7 +72,9 @@ export const TAPER_OPACITY = 0.1; // taper-wall fill-only opacity (connective ti
 export const STAGE_LABEL_PX = 24; // → 21.7 ✓
 export const VALUE_LABEL_PX = 28; // → 25.3 ✓ (the hero number of each band)
 export const DROP_LABEL_PX = 24; // → 21.7 ✓
-const STAGE_LABEL_MAX_CP = 22; // C3
+const STAGE_LABEL_MAX_CP = 36; // C3 — raised 22→36 (Emil's format-bench feedback: real stage names
+// like "Pass output validation + guardrails" were silently hidden); the renderer compresses
+// over-wide labels to the slot via textLength instead of hiding them.
 const VALUE_LABEL_MAX_CP = 10; // C4
 const DROP_LABEL_MAX_CP = 8; // C4b
 const LABEL_PAD = 12; // px padding inside a value slot
@@ -158,6 +169,8 @@ export type FunnelPlan = {
   dropLabels: "auto" | "off";
   /** True when, after clamping, < 2 renderable stages remain (C2 caption-only fallback). */
   fallback: boolean;
+  /** Format-scaled vertical geometry the renderer must draw with (viewBox height + band area). */
+  vgeom: FunnelVGeom;
   dropped: { stagesDropped: number; hiddenLabels: number; hiddenValues: number; hiddenDrops: number };
 };
 
@@ -191,9 +204,9 @@ export function funnelEdge(t: number): number {
  * ROW_Y0 + funnelEdge·(ROW_Y1−ROW_Y0); the band fills from yTop to yBottom as the edge crosses it.
  * Pinned to EXACT 0/1 outside its window (the renderer OMITS the clip/transform at g===1).
  */
-export function bandReveal(t: number, yTop: number, bandH: number): number {
+export function bandReveal(t: number, yTop: number, bandH: number, rowY0 = ROW_Y0, rowY1 = ROW_Y1): number {
   if (bandH <= 0) return 1;
-  const edgeY = ROW_Y0 + funnelEdge(t) * (ROW_Y1 - ROW_Y0);
+  const edgeY = rowY0 + funnelEdge(t) * (rowY1 - rowY0);
   return clamp01((edgeY - yTop) / bandH);
 }
 
@@ -203,9 +216,9 @@ export function bandReveal(t: number, yTop: number, bandH: number): number {
  * window, fixed 24 iterations. A `yBottom` at/below ROW_Y1 returns EDGE_END exactly; above
  * ROW_Y0 returns EDGE_START.
  */
-export function bandSettle(yBottom: number): number {
-  const span = ROW_Y1 - ROW_Y0;
-  const target = clamp01((yBottom - ROW_Y0) / span); // edge position needed to reach yBottom
+export function bandSettle(yBottom: number, rowY0 = ROW_Y0, rowY1 = ROW_Y1): number {
+  const span = rowY1 - rowY0;
+  const target = clamp01((yBottom - rowY0) / span); // edge position needed to reach yBottom
   if (target >= 1 - 1e-6) return EDGE_END;
   if (target <= 0) return EDGE_START;
   let lo = EDGE_START;
@@ -251,7 +264,9 @@ export function planFunnel(
   unitIn: string | undefined,
   accentIn: string | undefined,
   dropLabelsIn: "auto" | "off" | string | undefined,
+  vScale?: number,
 ): FunnelPlan {
+  const G = funnelVGeom(vScale);
   const mode: FunnelMode = modeIn === "bars" ? "bars" : "funnel"; // unknown/absent → funnel
   const unit = typeof unitIn === "string" ? unitIn : "";
   const accentKey = accentOr(accentIn, "cyan");
@@ -292,14 +307,14 @@ export function planFunnel(
   if (n >= 2) {
     const point = scalePoint<string>()
       .domain(stages.map((_, i) => String(i)))
-      .range([ROW_Y0, ROW_Y1])
+      .range([G.ROW_Y0, G.ROW_Y1])
       .padding(0.5);
-    yCenterOf = (i) => point(String(i)) ?? (ROW_Y0 + ROW_Y1) / 2;
+    yCenterOf = (i) => point(String(i)) ?? (G.ROW_Y0 + G.ROW_Y1) / 2;
   } else {
-    const cy = (ROW_Y0 + ROW_Y1) / 2;
+    const cy = (G.ROW_Y0 + G.ROW_Y1) / 2;
     yCenterOf = () => cy;
   }
-  const pitch = n >= 2 ? (ROW_Y1 - ROW_Y0) / n : ROW_Y1 - ROW_Y0;
+  const pitch = n >= 2 ? (G.ROW_Y1 - G.ROW_Y0) / n : G.ROW_Y1 - G.ROW_Y0;
 
   // 5. Per-band painted width: scale → MIN floor → C6 monotonic clamp (≤ prior painted width).
   let prevPainted = Infinity;
@@ -314,8 +329,8 @@ export function planFunnel(
     prevPainted = paintedW;
 
     const yCenter = yCenterOf(i);
-    const yTop = yCenter - BAND_H / 2;
-    const yBottom = yCenter + BAND_H / 2;
+    const yTop = yCenter - G.BAND_H / 2;
+    const yBottom = yCenter + G.BAND_H / 2;
 
     // Band x-anchor by mode: funnel centers at CX; bars left-anchors at LABEL_COL.
     const xLeft = mode === "bars" ? LABEL_COL : CX - paintedW / 2;
@@ -332,7 +347,11 @@ export function planFunnel(
     // the label column (bars).
     const trimmedLabel = s.label.trim();
     let labelHideReason: "empty" | "tooLong" | "tooThin" | undefined;
-    const labelSlot = mode === "bars" ? BARS_LABEL_ANCHOR_X : Math.max(paintedW, MAX_BAND_W * 0.5);
+    // funnel-mode labels are CENTERED above the band — their horizontal room is the plot, not the
+    // (possibly narrow) band. Cap: a centered label's RIGHT edge must stay left of the drop-off %
+    // labels (right-anchored AT PLOT_X1, extending left ~80px into the gap): 2·(PLOT_X1 − 80 − CX)
+    // = 600. A ≤36cp stage name estimates well under this, so real names always show.
+    const labelSlot = mode === "bars" ? BARS_LABEL_ANCHOR_X : Math.max(paintedW, 2 * (PLOT_X1 - 80 - CX));
     if (trimmedLabel.length === 0) labelHideReason = "empty";
     else if ([...trimmedLabel].length > STAGE_LABEL_MAX_CP) labelHideReason = "tooLong";
     else if (stageEstPx(trimmedLabel) > labelSlot) labelHideReason = "tooThin";
@@ -359,7 +378,7 @@ export function planFunnel(
       xLeft,
       yTop,
       yBottom,
-      bandH: BAND_H,
+      bandH: G.BAND_H,
       accentKey: accentOr(s.accent, accentKey),
       showLabel,
       ...(showLabel ? {} : { labelHideReason }),
@@ -368,8 +387,8 @@ export function planFunnel(
       ...(showValue ? {} : { valueHideReason }),
       valueCountText,
       monotonicClampApplied,
-      bandStart: bandSettle(yTop),
-      bandSettle: bandSettle(yBottom),
+      bandStart: bandSettle(yTop, G.ROW_Y0, G.ROW_Y1),
+      bandSettle: bandSettle(yBottom, G.ROW_Y0, G.ROW_Y1),
     };
   });
 
@@ -419,5 +438,5 @@ export function planFunnel(
     });
   }
 
-  return { mode, maxValue, bands, drops, pitch, accentKey, unit, dropLabels, fallback, dropped };
+  return { mode, maxValue, bands, drops, pitch, accentKey, unit, dropLabels, fallback, vgeom: G, dropped };
 }

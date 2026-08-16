@@ -11,7 +11,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { generateText, stepCountIs } from "ai";
 import { assembleBriefing } from "./lib/context.mjs";
-import { resolveModel, providerNames } from "./lib/model.mjs";
+import { resolveModel, providerNames, llmCallSignal, genLoopSignal } from "./lib/model.mjs";
 import {
   ROOT,
   writePost,
@@ -22,7 +22,7 @@ import {
 } from "./lib/agent-tools.mjs";
 import { runQA, findingsForAgent } from "./lib/qa.mjs";
 // Contracts + tool set are shared with the Path B service (generate-b.mjs) — one source of truth.
-import { TSX_CONTRACT, MOTION_CONTRACT, makePathBTools } from "./lib/generate-b.mjs";
+import { TSX_CONTRACT, MOTION_CONTRACT, makePathBTools, targetCanvasLine } from "./lib/generate-b.mjs";
 
 function parseArgs(argv) {
   const BOOL = new Set(["selftest", "motion"]);
@@ -120,17 +120,24 @@ async function main() {
   }
 
   if (!args.provider || !args.brief) {
-    console.error(`Usage: node tools/agent.mjs --provider <${providerNames().join("|")}> --brief "..." [--id X] [--base URL] [--steps N]`);
+    console.error(`Usage: node tools/agent.mjs --provider <${providerNames().join("|")}> --brief "..." [--id X] [--base URL] [--steps N] [--format portrait|square|vertical]`);
     console.error(`   or: node tools/agent.mjs --selftest`);
     process.exit(1);
   }
 
   const motion = !!args.motion;
+  // Output aspect (portrait 4:5 default · square 1:1 · vertical 9:16) — crosses into the system
+  // prompt (TARGET CANVAS) AND the QA inspection so the post is designed + gated at the true size.
+  const format = args.format && ["portrait", "square", "vertical"].includes(args.format) ? args.format : undefined;
+  if (args.format && !format) {
+    console.error(`✖ unknown --format "${args.format}" — use portrait | square | vertical`);
+    process.exit(1);
+  }
   const { model, modelId } = resolveModel(args.provider, { modelOverride: args.model });
   const briefing = await assembleBriefing(ROOT, { motion });
   const contract = motion ? MOTION_CONTRACT : TSX_CONTRACT;
-  const system = `${briefing}\n\n${contract}\n\nUse id "${id}" for the post file.`;
-  const { tools, isDone } = makePathBTools(id, base, { brief: args.brief, motion, provider: args.provider });
+  const system = `${briefing}\n\n${contract}${targetCanvasLine(format)}\n\nUse id "${id}" for the post file.`;
+  const { tools, isDone } = makePathBTools(id, base, { brief: args.brief, motion, provider: args.provider, format });
   const maxSteps = Number(args.steps || 24);
 
   console.error(`→ ${args.provider} (${modelId}) building ${motion ? "VIDEO" : "still"} "${id}" — up to ${maxSteps} steps...`);
@@ -142,6 +149,7 @@ async function main() {
     prompt: args.brief,
     tools,
     stopWhen: [stepCountIs(maxSteps), () => isDone()],
+    abortSignal: genLoopSignal(),
   });
 
   const secs = ((Date.now() - t0) / 1000).toFixed(1);

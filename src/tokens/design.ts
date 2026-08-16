@@ -48,17 +48,59 @@ export const fonts = {
 export const formats = {
   portrait: { width: 1080, height: 1350 },
   square: { width: 1080, height: 1080 },
+  vertical: { width: 1080, height: 1920 }, // 9:16 — full-screen Stories/Reels/TikTok/Shorts
   landscape: { width: 1920, height: 1080 },
 } as const;
 
 export type FormatKey = keyof typeof formats;
 
+// The output formats a post can actually be RENDERED at (portrait = default 4:5; square = 1:1; vertical =
+// 9:16). `landscape` is a layout token, not a selectable post output. A post declares its choice in
+// `RenderPost.format`; every render surface — PostFrame, the Preview #post-canvas, the Remotion composition,
+// and (transitively) the QA viewport — MUST resolve it through `resolveFormat` so they can never drift out of
+// lockstep. That lockstep is the single invariant the render-truth parity gate depends on.
+export const outputFormats = ["portrait", "square", "vertical"] as const;
+export type OutputFormat = (typeof outputFormats)[number];
+
+// Resolve an untrusted format value (from a spec/URL/job) to a known FormatKey — unknown/absent → the
+// default. Pure and total, so no surface can crash on a bad value; the worst case is a portrait fallback.
+export function resolveFormat(f: string | null | undefined): FormatKey {
+  return f != null && f in formats ? (f as FormatKey) : layout.defaultFormat;
+}
+
+// Chart vertical-fill scale (Emil's 9:16 spacing feedback). The chart family (bar/area/line) draws into a
+// fixed 1000×640-ish source viewBox with preserveAspectRatio="meet"; in the TALL vertical viz zone that box
+// is width-constrained and floats in a dead band. `chartVScale` stretches ONLY the vertical geometry (viewBox
+// height + all plot y-coordinates, NOT font/stroke px) by this factor so the plot fills ~20% more of the tall
+// frame — bars/areas grow taller, horizontal-bar spacing opens up. Portrait/square = 1 (Emil: "1:1 is fine",
+// portrait was never flagged), so their geometry — and every deterministic check, which never passes a scale —
+// stays byte-identical. Applied per-primitive by threading it into the pure planners (default 1).
+export const chartVScale = (f: string | null | undefined): number =>
+  resolveFormat(f) === "vertical" ? 1.45 : 1;
+
 export const layout = {
   defaultFormat: "portrait" as FormatKey,
   columns: 12,
+  // Flat defaults (portrait). Kept for back-compat with anything reading them directly; PostFrame now
+  // resolves per-format via `ratios` below. Portrait/square share these values, so they stay byte-identical.
   headlineRatio: 0.24,
   vizRatio: 0.56,
   summaryRatio: 0.2,
+  // Per-format grid split (headline / viz / summary fractions of the frame HEIGHT). Portrait + square keep
+  // the flat split above BYTE-IDENTICALLY. Vertical (9:16) is the taller frame: it keeps the chrome near its
+  // portrait ABSOLUTE height (header ~0.17·1920 ≈ 326px, footer ~0.14·1920 ≈ 269px — same as portrait's
+  // 324/270) and pours ALL the extra height into the viz zone (0.69·1920 ≈ 1325px). So a height-filling
+  // visual (charts stretch via h-full) dominates the frame instead of a portrait-sized band marooned in
+  // whitespace, while the headline/takeaway/signature keep the density they have in portrait.
+  ratios: {
+    portrait: { headline: 0.24, viz: 0.56, summary: 0.2 },
+    square: { headline: 0.24, viz: 0.56, summary: 0.2 },
+    // Vertical (9:16): Emil's feedback — give the bottom metric cards a bit more height (0.14 → 0.16 ≈
+    // 307px vs the old 269px), taken from the viz zone (0.69 → 0.67); the chart still dominates because
+    // it now fills its row (chartVScale). headline unchanged.
+    vertical: { headline: 0.17, viz: 0.67, summary: 0.16 },
+    landscape: { headline: 0.24, viz: 0.56, summary: 0.2 },
+  } as Record<FormatKey, { headline: number; viz: number; summary: number }>,
   radius: {
     panel: "1rem",
     card: "0.875rem",

@@ -18,9 +18,10 @@
 // inspector reads viewBox coordinates as the single deterministic system.
 // Spec: planning/primitive-library/handoffs/PL-3.1-divergence.md §2.5.
 
-import { useId } from "react";
+import { useContext, useId } from "react";
 import type { Accent } from "@/posts/renderTypes";
-import { colors, text, stroke } from "@/tokens/design";
+import { colors, text, stroke, chartVScale } from "@/tokens/design";
+import { FormatContext } from "@/components/layout/formatContext";
 import { easings } from "@/tokens/motion";
 import { planCountUp } from "@/lib/countup";
 import {
@@ -29,11 +30,9 @@ import {
   type DivergenceMode,
   type DivergenceRow,
   VIEW_W,
-  VIEW_H,
   DOT_R,
   AXIS_X0,
   AXIS_X1,
-  AXIS_Y,
   LABEL_ANCHOR_X,
   SLOPE_X_LEFT,
   SLOPE_X_RIGHT,
@@ -89,7 +88,13 @@ export function Divergence({
   t = 1,
 }: Props) {
   const uid = useId();
-  const plan = planDivergence(items, axisMin, axisMax, mode);
+  // Vertical-fill (Emil's format-bench feedback): stretch every plot y + the viewBox height on the
+  // tall aspect so the rows/axis SPREAD over the frame instead of clustering mid-band. The SAME
+  // vScale drives the plan AND the axis geometry below — 1 on portrait/square (byte-identical;
+  // the checks never pass it).
+  const vScale = chartVScale(useContext(FormatContext));
+  const plan = planDivergence(items, axisMin, axisMax, mode, vScale);
+  const { VIEW_H: vbH, AXIS_Y: axisY } = plan.vgeom;
   const aColor = accentHex(startAccent);
   const bColor = accentHex(endAccent);
 
@@ -115,7 +120,7 @@ export function Divergence({
 
   return (
     <svg
-      viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
+      viewBox={`0 0 ${VIEW_W} ${vbH}`}
       preserveAspectRatio="xMidYMid meet"
       className="block h-full w-full"
       role="img"
@@ -147,15 +152,15 @@ export function Divergence({
       {/* Dumbbell axis baseline + ticks. */}
       {plan.mode === "dumbbell" && (
         <g opacity={frameOn} data-diverge-axis>
-          <line x1={AXIS_X0} x2={AXIS_X1} y1={AXIS_Y} y2={AXIS_Y} stroke="rgba(184,178,167,0.30)" strokeWidth={1.5} />
+          <line x1={AXIS_X0} x2={AXIS_X1} y1={axisY} y2={axisY} stroke="rgba(184,178,167,0.30)" strokeWidth={1.5} />
           {plan.ticks.map((tick, i) => {
             const x = AXIS_X0 + ((tick - plan.axisMin) / (plan.axisMax - plan.axisMin)) * (AXIS_X1 - AXIS_X0);
             return (
               <g key={`${uid}-tick-${i}`}>
-                <line x1={x} x2={x} y1={AXIS_Y - 4} y2={AXIS_Y + 4} stroke="rgba(184,178,167,0.30)" strokeWidth={1.5} />
+                <line x1={x} x2={x} y1={axisY - 4} y2={axisY + 4} stroke="rgba(184,178,167,0.30)" strokeWidth={1.5} />
                 <text
                   x={x}
-                  y={AXIS_Y + 28}
+                  y={axisY + 28}
                   textAnchor="middle"
                   fill={colors.text.tertiary}
                   fontFamily="'JetBrains Mono', monospace"

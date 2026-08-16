@@ -18,8 +18,10 @@
 // edge passes each vertex (omitted at settle); `annotations` fade in AFTER the line settles (DRAW_END).
 // Spec: planning/primitive-library/handoffs/PL-2.7-line-variants.md §2.5 / §2.7 / §3.
 
-import { useId } from "react";
-import { stroke, text } from "@/tokens/design";
+import { useContext, useId } from "react";
+import { stroke, text, chartVScale } from "@/tokens/design";
+import { FormatContext } from "@/components/layout/formatContext";
+import { appear } from "@/lib/reveal";
 import {
   planLine,
   markerVisibleAt,
@@ -54,6 +56,8 @@ type Props = {
   yFormat?: (v: number) => string;
   height?: number;
   reveal?: number;
+  /** Global progress 0..1 — fills any OMITTED reveal prop via the standard schedule (so Path B can just pass t). Explicit props win. */
+  t?: number;
   caption?: string;
   // ── PL-2.7 additive knobs (all OPTIONAL; every default reproduces the plain line) ──
   variant?: LineVariant;
@@ -70,14 +74,26 @@ export function LineChart({
   yMax = 1,
   yTicks = [0, 0.25, 0.5, 0.75, 1.0],
   yFormat = (v) => `${Math.round(v * 100)}%`,
-  height = 560,
-  reveal = 1,
+  height: heightProp = 560,
+  reveal: revealProp,
+  t = 1,
   caption,
   variant = "line",
   markers = "off",
   annotations,
 }: Props) {
+  // Strategy A t-fallback: an omitted reveal prop derives from the global t via the SAME
+  // appear(t,start,dur) schedule PostRenderer passes explicitly; explicit props override
+  // (byte-identical for Path A), and at the default t=1 every fallback is exactly 1 (settled —
+  // backward compatible).
+  const reveal = revealProp ?? appear(t, 0.35, 0.45);
+
   const uid = useId();
+
+  // Vertical-fill (Emil's 9:16 feedback): stretch the plot height on the tall aspect so the trace fills the
+  // frame instead of floating in a dead band. line.ts drives ALL vertical geometry off `height` with fixed
+  // pads, so scaling the height in is the whole change; portrait/square (scale 1) stay byte-identical.
+  const height = Math.round(heightProp * chartVScale(useContext(FormatContext)));
 
   const plan = planLine({
     series,

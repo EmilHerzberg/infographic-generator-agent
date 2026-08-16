@@ -15,7 +15,7 @@ import { fileURLToPath } from "node:url";
 import { generateObject, jsonSchema, NoObjectGeneratedError } from "ai";
 import { assembleBriefing } from "./lib/context.mjs";
 import { validate } from "./lib/validate.mjs";
-import { resolveModel, providerNames } from "./lib/model.mjs";
+import { resolveModel, providerNames, llmCallSignal, genLoopSignal } from "./lib/model.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -82,6 +82,7 @@ async function main() {
       system,
       prompt: args.brief,
       maxRetries: 2,
+      abortSignal: llmCallSignal(),
     });
     post = object;
     const secs = ((Date.now() - t0) / 1000).toFixed(1);
