@@ -3,7 +3,7 @@
 // units). Returns severity-tagged findings. Configurable model via JUDGE_PROVIDER/JUDGE_MODEL.
 import { generateObject } from "ai";
 import { z } from "zod";
-import { resolveModel } from "./model.mjs";
+import { resolveModel, llmCallSignal } from "./model.mjs";
 
 const JudgeSchema = z.object({
   dataFidelityPass: z.boolean(),
@@ -32,7 +32,7 @@ export async function judgeDataFidelity({ brief, texts, provider }) {
     `SOURCE BRIEF:\n${brief}\n\n` +
     `RENDERED INFOGRAPHIC TEXT (one string per element):\n${(texts || []).map((t) => `- ${t}`).join("\n")}`;
 
-  const { object } = await generateObject({ model, schema: JudgeSchema, system: SYSTEM, prompt, maxRetries: 2 });
+  const { object } = await generateObject({ model, schema: JudgeSchema, system: SYSTEM, prompt, maxRetries: 2, abortSignal: llmCallSignal() });
 
   return (object.issues || []).map((i) => ({
     check: "dataFidelity",

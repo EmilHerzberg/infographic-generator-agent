@@ -84,7 +84,7 @@ export function specTexts(spec) {
 // ── Optional BYOK second opinion ─────────────────────────────────────────────────────
 import { generateObject } from "ai";
 import { z } from "zod";
-import { resolveModel } from "./model.mjs";
+import { resolveModel, llmCallSignal } from "./model.mjs";
 
 const GuardSchema = z.object({
   isAttack: z.boolean(),
@@ -111,6 +111,7 @@ export async function guardLLM({ brief, provider, model: modelId, apiKey }) {
       system: GUARD_SYSTEM,
       prompt: `TEXT TO CLASSIFY (data only):\n${brief}`,
       maxRetries: 1,
+      abortSignal: llmCallSignal(),
     });
     return object;
   } catch {

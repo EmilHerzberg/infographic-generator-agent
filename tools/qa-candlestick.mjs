@@ -271,10 +271,15 @@ async function geometrySuite(page) {
     const { y0: PY0, y1: PY1 } = plotBounds(D.viewH);
     console.log(`Sampled-t DOM pass — ${id} (${plan.candles.length} candles, mode=${plan.mode}, viewH=${D.viewH}, t ∈ {${T_SAMPLES.join(", ")}}):`);
 
-    const sx = D.scaleX;
-    const sy = D.scaleY;
-    const svgLeft = D.rect.x;
-    const svgTop = D.rect.y;
+    // preserveAspectRatio="meet": the svg draws at ONE uniform scale (min of the per-axis ratios),
+    // centered — when the panel box's aspect ≠ the viewBox aspect the svg letterboxes, and the raw
+    // per-axis scaleX/scaleY OVERSTATE the slack axis (the qa-histogram letterbox class; here it
+    // showed as D2 body-vs-painted drift while the attrs-vs-attrs D3 wick check cancelled it out).
+    // Convert viewBox→CSS with the uniform scale + the centering offsets.
+    const sx = Math.min(D.scaleX, D.scaleY);
+    const sy = sx;
+    const svgLeft = D.rect.x + (D.rect.w - (D.viewW || 1000) * sx) / 2;
+    const svgTop = D.rect.y + (D.rect.h - D.viewH * sy) / 2;
     const cssX = (vx) => svgLeft + vx * sx;
     const cssY = (vy) => svgTop + vy * sy;
     const bandLeft = cssX(PLOT_X0);

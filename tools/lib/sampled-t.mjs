@@ -12,9 +12,12 @@ import { measure } from "./inspect.mjs";
 
 export const BASE = process.env.PREVIEW_URL || "http://localhost:5173";
 
-// The Preview viewport every gate used: 1180×1480 so the 1080×1350 #post-canvas fits with margin,
+// The Preview viewport every gate uses: 1180 wide fits any 1080-wide canvas with margin; 2080 tall fits the
+// TALLEST output (1080×1920 vertical / 9:16) whole, so a tall canvas is never clipped and its full height is
+// measured + screenshot-able. Byte-neutral for the shorter formats: every inspector check is canvas-relative
+// (measured off #post-canvas's own rect), so extra empty viewport below the canvas changes no measurement.
 // deviceScaleFactor 1 so screen px == source px.
-export const VIEWPORT = { width: 1180, height: 1480 };
+export const VIEWPORT = { width: 1180, height: 2080 };
 
 // Load the Preview at (id, t) and return the inspector measure() report. Identical to the
 // loadPage() each gate inlined: networkidle, fonts.ready (now the offline faces — render-truth),

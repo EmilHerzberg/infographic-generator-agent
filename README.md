@@ -11,8 +11,9 @@
 # infographic-generator-agent
 
 **Turn a one-line brief into an on-brand animated video.** An AI agent classifies your idea, composes
-the right visualization — charts, diagrams, comparisons — as motion, and renders a vertical
-(1080×1350) MP4 with [Remotion](https://remotion.dev). Bring your own model key — DeepSeek, OpenAI,
+the right visualization — charts, diagrams, comparisons — as motion, and renders an MP4 with
+[Remotion](https://remotion.dev) at **4:5 portrait (default), 1:1 square, or 9:16 vertical**
+(`--format`). Bring your own model key — DeepSeek, OpenAI,
 Anthropic, Gemini, Vertex, or any OpenAI-compatible endpoint. One consistent visual style, every output.
 
 There are two engines:
@@ -100,8 +101,10 @@ fail to converge in Path B's self-correction loop.
    (`src/components/primitives/`) — bar/line/area/scatter/histogram/donut/candlestick charts,
    funnels, pipelines, tier stacks, taxonomies, divergences, stat heroes, comparison layouts, …
 3. **QA** — a headless inspector (`tools/inspect.mjs`, Playwright) measures the rendered frame against
-   hard rules (no overflow, no collisions, mobile-legible type, safe margins) and the agent iterates.
-4. **Render** — Remotion composites the animated component to a vertical MP4.
+   hard rules (no overflow, no collisions, mobile-legible type, safe margins, multi-frame layout
+   stability — no "shaking" charts, no unlabeled marks) and the agent iterates at the TRUE output
+   aspect. `npm run qa:formats` proves every primitive at all three aspects.
+4. **Render** — Remotion composites the animated component to an MP4 at the chosen format.
 
 ## Make it yours
 

@@ -4,7 +4,7 @@
 import { generateObject } from "ai";
 import { z } from "zod";
 import { readFile } from "node:fs/promises";
-import { resolveModel } from "./model.mjs";
+import { resolveModel, llmCallSignal } from "./model.mjs";
 
 const VisionSchema = z.object({
   readable: z.boolean(),
@@ -36,6 +36,7 @@ export async function visionReview({ screenshotPath, provider }) {
     model,
     schema: VisionSchema,
     system: SYSTEM,
+    abortSignal: llmCallSignal(),
     messages: [
       {
         role: "user",

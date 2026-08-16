@@ -20,7 +20,7 @@ const FIXTURES = [
 
 const browser = await chromium.launch();
 try {
-  const page = await browser.newPage({ viewport: { width: 1180, height: 1480 }, deviceScaleFactor: 1 });
+  const page = await browser.newPage({ viewport: { width: 1180, height: 2080 }, deviceScaleFactor: 1 }); // tall enough for 1080×1920 (9:16); canvas-relative checks unaffected
   const out = {};
   for (const id of FIXTURES) {
     await page.goto(`${BASE}/?id=${encodeURIComponent(id)}&t=1`, { waitUntil: "networkidle", timeout: 20000 });

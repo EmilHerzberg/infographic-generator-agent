@@ -197,8 +197,14 @@ async function geometrySuite(page) {
     // C10 connector-within-axis (NEW): dot centers in the plot band; drawn connector ⊆ the
     // dot-to-dot segment (length ≤ |b−a|); nothing clipped by the viewBox.
     let bandOk = true, bandDetail = "";
-    const sx = D.scaleX; // viewBox→CSS x factor; band edges in CSS px relative to svg left
-    const svgLeft = D.rect.x;
+    // preserveAspectRatio="meet": the svg draws at ONE uniform scale (min of the per-axis ratios),
+    // centered — when the panel box's aspect ≠ the viewBox aspect the svg letterboxes and the raw
+    // per-axis scaleX/scaleY OVERSTATE the slack axis (the qa-histogram letterbox class; here it
+    // inflated C10's drawn-vs-full comparison). The centering offsets fall out of rect + scales
+    // alone: off = rect·(1 − su/scale)/2 — the collector need not report the viewBox dims.
+    const sx = Math.min(D.scaleX, D.scaleY); // uniform painted scale
+    const offX = (D.rect.w * (1 - sx / D.scaleX)) / 2;
+    const svgLeft = D.rect.x + offX;
     const bandLo = svgLeft + (AXIS_X0 - DOT_R) * sx; // painted dot may reach AXIS_X0 − R
     const bandHi = svgLeft + (AXIS_X1 + DOT_R) * sx;
     for (const t of T_SAMPLES) {
@@ -217,7 +223,7 @@ async function geometrySuite(page) {
           // connector attrs are viewBox units). Compare drawn ≤ full + tolerance.
           const fullVB = plan.mode === "dumbbell"
             ? Math.abs((dotCenters[1].cx - dotCenters[0].cx) / sx)
-            : Math.hypot((dotCenters[1].cx - dotCenters[0].cx) / sx, (dotCenters[1].cy - dotCenters[0].cy) / (D.scaleY));
+            : Math.hypot((dotCenters[1].cx - dotCenters[0].cx) / sx, (dotCenters[1].cy - dotCenters[0].cy) / sx);
           if (drawn > fullVB + 2) { bandOk = false; bandDetail = `row ${r} drawn connector ${drawn.toFixed(1)} > full ${fullVB.toFixed(1)} at t=${t}`; }
         }
       }

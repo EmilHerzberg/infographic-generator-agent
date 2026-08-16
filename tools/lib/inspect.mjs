@@ -230,8 +230,26 @@ export function measure() {
   };
 
   const textOccluded = [];
+  // A label carrying its OWN readability backing — a dark, contrasting halo painted UNDER the glyphs
+  // (paint-order:stroke + a near-background stroke ≥ ~5px) — stays legible over ANY fill/line by design
+  // (the area annotation + end labels use exactly this). The occlusion scan is geometric (does a path
+  // cross the box), so without this it would flag a label that is in fact perfectly readable. Exempt it:
+  // the halo restores contrast, which is the whole thing the "occluded = unreadable" gate protects.
+  const hasBackingHalo = (el) => {
+    if (!el || typeof el.getAttribute !== "function") return false;
+    const s = getComputedStyle(el);
+    const po = (s.paintOrder || el.getAttribute("paint-order") || "").trim();
+    if (!po.startsWith("stroke")) return false;
+    const sw = parseFloat(s.strokeWidth) || 0;
+    if (sw < 5) return false;
+    const st = s.stroke;
+    if (!st || st === "none") return false;
+    const rgb = (st.match(/[\d.]+/g) || []).slice(0, 3).map(Number);
+    if (rgb.length < 3) return false;
+    return (rgb[0] + rgb[1] + rgb[2]) / 3 < 60; // near-background dark ink (e.g. #0E1116) → a true halo
+  };
   // text targets: the genuine text leaves (SVG <text> + HTML), with their canvas-local box.
-  const occTargets = measured.filter((m) => m.text && m.text.length > 0 && m.rect.w > 4 && m.rect.h > 4);
+  const occTargets = measured.filter((m) => m.text && m.text.length > 0 && m.rect.w > 4 && m.rect.h > 4 && !hasBackingHalo(m._el));
   if (occTargets.length) {
     const strokeEls = [...canvas.querySelectorAll("path, line, polyline, polygon")].filter((el) => {
       if (!visible(el)) return false;
@@ -401,6 +419,72 @@ export function measure() {
     }
   }
 
+  // UNLABELED CATEGORICAL MARKS — a HAND-ROLLED chart where each data mark is a distinct CATEGORY (bar,
+  // funnel stage, pie/donut wedge) but some marks carry NO label at all is misleading: you can't read them.
+  // Every PRIMITIVE labels each mark by construction, so this only ever fires on model-authored bespoke
+  // charts (the blind spot behind "3 of 6 bars shipped with no value"). Line/scatter are DELIBERATELY
+  // excluded — the axis carries their values and not every point is labelled. Conservative + WARN-grade:
+  // each mark KIND needs ≥N clearly-marks and flags only when ≥40% have no text anywhere they'd be labelled.
+  const marksUnlabeled = (() => {
+    const texts = [
+      ...[...canvas.querySelectorAll("svg text")].filter(visible).filter((el) => (el.textContent || "").trim()).map((el) => toLocal(el.getBoundingClientRect())),
+      ...measured.map((m) => toLocal(m._el.getBoundingClientRect())),
+    ].filter((t) => t.w > 2 && t.h > 2);
+    const accentFill = (s) => {
+      if (!s.fill || s.fill === "none") return false;
+      if ((parseFloat(s.fillOpacity) || 1) * (parseFloat(s.opacity) || 1) < 0.35) return false;
+      return saturation(s.fill) >= 0.18; // neutral chrome / background wash is never a data mark
+    };
+    // Label proximity per mark shape. A COLUMN label sits over/under a vertical bar; a ROW label sits at a
+    // horizontal bar's / funnel stage's height (category on the left, value at the end); an INSIDE label
+    // sits within a wedge's box.
+    const inColumn = (m) => texts.some((t) => { const cx = t.x + t.w / 2; return cx >= m.x - 14 && cx <= m.right + 14 && t.bottom >= m.y - 46 && t.y <= m.bottom + 46; });
+    const inRow = (m) => texts.some((t) => { const cy = t.y + t.h / 2; return cy >= m.y - 10 && cy <= m.bottom + 10; });
+    const inside = (m) => texts.some((t) => { const cx = t.x + t.w / 2, cy = t.y + t.h / 2; return cx >= m.x - 8 && cx <= m.right + 8 && cy >= m.y - 8 && cy <= m.bottom + 8; });
+    const rects = [...canvas.querySelectorAll("svg rect")].filter(visible)
+      .map((el) => ({ s: getComputedStyle(el), r: toLocal(el.getBoundingClientRect()) }))
+      .filter(({ s, r }) => accentFill(s) && r.w >= 8 && r.h >= 8);
+    const groupBy = (arr, keyFn) => { const m = new Map(); for (const x of arr) { const k = keyFn(x); if (!m.has(k)) m.set(k, []); m.get(k).push(x); } return [...m.values()]; };
+    const cands = []; // { kind, marks:[box], labeled:fn }
+    // VERTICAL bars — share a bottom edge (baseline), heights vary.
+    for (const g of groupBy(rects, (b) => Math.round(b.r.bottom / 5)))
+      if (g.length >= 4) { const hs = g.map((b) => b.r.h); if (Math.max(...hs) - Math.min(...hs) >= 12) cands.push({ kind: "bar", marks: g.map((b) => b.r), labeled: inColumn }); }
+    // HORIZONTAL bars — share a left edge, widths vary (stacked rows).
+    for (const g of groupBy(rects, (b) => Math.round(b.r.x / 5)))
+      if (g.length >= 4) { const ws = g.map((b) => b.r.w); if (Math.max(...ws) - Math.min(...ws) >= 12) cands.push({ kind: "bar", marks: g.map((b) => b.r), labeled: inRow }); }
+    // DONUT / PIE — ≥3 accent PATHS (wedges) that all CONTAIN a common centre point (the hub every wedge's
+    // apex touches — a wedge's bbox is offset toward its arc, so their boxes overlap AT the hub, not at a
+    // shared bbox centre). A stacked area's bands don't share a hub. Wedge labels sit on/inside the ring.
+    const bigPaths = [...canvas.querySelectorAll("svg path")].filter(visible)
+      .map((el) => ({ s: getComputedStyle(el), r: toLocal(el.getBoundingClientRect()) }))
+      .filter(({ s, r }) => accentFill(s) && r.w >= 30 && r.h >= 30);
+    if (bigPaths.length >= 3) {
+      const hubX = bigPaths.reduce((a, p) => a + p.r.x + p.r.w / 2, 0) / bigPaths.length;
+      const hubY = bigPaths.reduce((a, p) => a + p.r.y + p.r.h / 2, 0) / bigPaths.length;
+      // the hub sits at each wedge's APEX — a CORNER of its bbox — so allow the boundary (a small outward margin).
+      const wedges = bigPaths.filter((p) => hubX >= p.r.x - 6 && hubX <= p.r.right + 6 && hubY >= p.r.y - 6 && hubY <= p.r.bottom + 6);
+      if (wedges.length >= 3) cands.push({ kind: "donut", marks: wedges.map((p) => p.r), labeled: inside });
+    }
+    // FUNNEL — ≥3 accent polygons/paths STACKED vertically (each begins near where the last ended, gaps
+    // allowed) AND NARROWING top→bottom (the funnel shape) — a stacked area's bands overlap in y and don't
+    // systematically narrow, so this doesn't catch it. Stage labels sit in each stage's row.
+    const stageEls = [...canvas.querySelectorAll("svg polygon, svg path")].filter(visible)
+      .map((el) => ({ s: getComputedStyle(el), r: toLocal(el.getBoundingClientRect()) }))
+      .filter(({ s, r }) => accentFill(s) && r.w >= 40 && r.h >= 10 && r.h <= 320)
+      .sort((a, b) => a.r.y - b.r.y);
+    const stack = [];
+    for (const p of stageEls) { const last = stack[stack.length - 1]; if (!last || (p.r.y >= last.r.bottom - 30 && p.r.y <= last.r.bottom + 70)) stack.push(p); }
+    if (stack.length >= 3 && stack[0].r.w > stack[stack.length - 1].r.w * 1.15)
+      cands.push({ kind: "funnel", marks: stack.map((p) => p.r), labeled: inRow });
+
+    let worst = null;
+    for (const c of cands) {
+      const unlabeled = c.marks.filter((m) => !c.labeled(m)).length;
+      if (unlabeled / c.marks.length >= 0.4 && (!worst || unlabeled > worst.unlabeled)) worst = { kind: c.kind, count: c.marks.length, unlabeled };
+    }
+    return worst;
+  })();
+
   const sigEl = canvas.querySelector('[aria-label^="Creator:"]');
   const signaturePresent = !!sigEl;
   // Effective (cumulative) opacity of the signature — for the motion "visible by 1.2s" check.
@@ -412,6 +496,63 @@ export function measure() {
 
   // Full rendered text strings (untruncated) — used by the data-fidelity judge.
   const texts = leaves.map((el) => (el.textContent || "").trim().replace(/\s+/g, " ")).filter(Boolean);
+
+  // ── Generic per-text-leaf ANCHOR boxes (canvas-local px) + cumulative opacity ──
+  // Consumed by the multi-frame LAYOUT-STABILITY check (tools/lib/qa.mjs): a settled,
+  // static-content label (an axis tick, a category label, the takeaway, the signature) must
+  // NOT move between two frames of the animation. When one does, the mid-section's height or
+  // a chart's axis scale is a function of `t` — the layout resizes every frame and shoves the
+  // footer (the "shaking bars / footer pushed up" defect). The check keys elements by their
+  // text across frames, so a count-up value (content differs per frame) never matches, and an
+  // element still revealing (opacity < ~0.9) is excluded — only genuinely-settled anchors gate.
+  const cumOpacity = (el) => {
+    let o = 1;
+    for (let n = el; n && n !== canvas.parentElement; n = n.parentElement) {
+      const ov = parseFloat(getComputedStyle(n).opacity);
+      if (Number.isFinite(ov)) o *= ov;
+    }
+    return o;
+  };
+  // Whether a CSS transform string ACTIVELY displaces/scales the element (vs a settled identity). A
+  // slide/scale entrance mid-flight is a non-identity matrix (e.g. translateX(-8px) ⇒ matrix(1,0,0,1,-8,0));
+  // a SETTLED element that merely still carries `transform: translateX(0)` is an identity matrix and must
+  // NOT be treated as moving. Tolerate sub-pixel translate + tiny fp error.
+  const isDisplacing = (tr) => {
+    if (!tr || tr === "none") return false;
+    let m = tr.match(/^matrix\(([^)]+)\)$/);
+    if (m) {
+      const p = m[1].split(",").map((v) => parseFloat(v)); // a,b,c,d,e,f
+      return !(Math.abs(p[0] - 1) < 1e-3 && Math.abs(p[1]) < 1e-3 && Math.abs(p[2]) < 1e-3 && Math.abs(p[3] - 1) < 1e-3 && Math.abs(p[4]) < 0.5 && Math.abs(p[5]) < 0.5);
+    }
+    m = tr.match(/^matrix3d\(([^)]+)\)$/);
+    if (m) {
+      const p = m[1].split(",").map((v) => parseFloat(v));
+      const id = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
+      return !p.every((x, i) => (i === 12 || i === 13 || i === 14 ? Math.abs(x) < 0.5 : Math.abs(x - id[i]) < 1e-3));
+    }
+    return true; // some other transform-function string we didn't parse → treat as displacing (safe)
+  };
+  // Whether the element or ANY ancestor (up to the canvas) is ACTIVELY displaced by a transform — i.e. it
+  // is mid-animation (a slide/scale/spring entrance). Such an element's PAINTED position
+  // (getBoundingClientRect) is moving BY DESIGN, so the layout-stability check must EXCLUDE it: a
+  // fully-opaque label whose entrance fade finished before its slide did would otherwise read as "shake".
+  // Only genuine LAYOUT reflow (a t-dependent container height pushing the footer — the moved element
+  // itself carrying no active transform) then counts. HTML + SVG both report `transform` via getComputedStyle.
+  const isTransformed = (el) => {
+    for (let n = el; n && n !== canvas.parentElement; n = n.parentElement) {
+      if (isDisplacing(getComputedStyle(n).transform)) return true;
+    }
+    return false;
+  };
+  const anchors = measured.map((m) => ({
+    text: m.text,
+    x: +m.rect.x.toFixed(1),
+    y: +m.rect.y.toFixed(1),
+    w: +m.rect.w.toFixed(1),
+    h: +m.rect.h.toFixed(1),
+    opacity: +cumOpacity(m._el).toFixed(3),
+    transformed: isTransformed(m._el),
+  }));
 
   // ── Q1 deterministic design checks ──────────────────────────────────────────
   // Visual hierarchy: largest display text vs median body text.
@@ -494,9 +635,23 @@ export function measure() {
       }
     }
   }
-  // Gate on coverage: clean designs ~0.20–0.25, a dense-but-acceptable one ~0.39,
-  // an over-packed layout ~0.47. Threshold sits between the last two.
-  const crowded = textCoverage > 0.42;
+  // Gate on coverage: clean designs ~0.20–0.25, a dense-but-acceptable one ~0.39, an over-packed
+  // layout ~0.47. The 0.42 threshold was calibrated on PORTRAIT (4:5, W/H≈0.8). A SHORTER canvas
+  // (square 1:1) legitimately fills a bigger area fraction with equivalent content and bigger type, so
+  // the cap must RISE for it or valid square layouts get rejected as "over-crowded" at ERROR severity
+  // and never converge. But it must NEVER drop below the tuned 0.42 for a TALLER frame (vertical 9:16,
+  // W/H≈0.56) — doing so wrongly fails legitimate ~34% vertical content. So: raise for shorter, floor at
+  // 0.42. 0.525·(W/H) ⇒ 0.42 at 4:5, ~0.52 at 1:1; max(0.42,·) keeps 9:16 at 0.42; min(0.55,·) caps it.
+  // Square (1:1) gets an explicitly RAISED band (0.55, was 0.525 via the formula): the short frame is
+  // ACCEPTED to pack denser than the other aspects (Emil's call) — the mobile floors + collision +
+  // overflow gates still bound it, so "denser" can never mean "unreadable". Portrait stays at the
+  // calibrated 0.42; vertical keeps the 0.42 floor.
+  // Floor 0.43 (was 0.42): the vertical-fill bottom cards are intentionally taller/denser, nudging
+  // portrait's text-coverage baseline up a hair — still far below the ~0.47 over-packed reference, so
+  // genuinely crowded layouts still fail. Square keeps its explicit 0.55 band; vertical floors at 0.43.
+  const arRatio = W / H;
+  const crowdedCap = arRatio >= 0.95 ? 0.55 : Math.min(0.55, Math.max(0.43, 0.525 * arRatio));
+  const crowded = textCoverage > crowdedCap;
 
   // ── PL-1.1 count-up geometry ────────────────────────────────────────────────
   // Per-MetricCard card bbox, FitLine zone width, applied zoom, and the value text's
@@ -1233,6 +1388,7 @@ export function measure() {
       rect: toLocal(sr),
       scaleX: +scaleX.toFixed(4),
       scaleY: +scaleY.toFixed(4),
+      viewH: vb[3] || 640, // PL-0.8 row-aware viewBox height — qa-area plans with the RENDERED value
       nodeCount: svg.querySelectorAll("*").length,
       seriesCount: seriesEls.length,
       series: seriesEls,
@@ -1325,6 +1481,7 @@ export function measure() {
       rect: toLocal(sr),
       scaleX: +scaleX.toFixed(4),
       scaleY: +scaleY.toFixed(4),
+      viewH: vb[3] || 640, // PL-0.8 row-aware viewBox height — qa-histogram plans with the RENDERED value
       nodeCount: svg.querySelectorAll("*").length,
       binCount: binEls.length,
       bins: binEls,
@@ -2181,13 +2338,16 @@ export function measure() {
     clipped,
     textOccluded,
     textOverflowsBox,
+    marksUnlabeled,
     lowContrast,
     crowded,
+    crowdedCap,
     textCoverage,
     crampedPairs,
     signaturePresent,
     signatureOpacity,
     texts,
+    anchors,
     hierarchyRatio,
     typo,
     duplicates,
@@ -2240,7 +2400,7 @@ export async function isolatePageEgress(page) {
   return blocked;
 }
 
-export async function inspectLayout({ url, timeoutMs = 20000, screenshotPath } = {}) {
+export async function inspectLayout({ url, timeoutMs = 20000, screenshotPath, vizShotPath } = {}) {
   const { chromium } = await import("playwright"); // lazy (devDependency; see top-of-file note)
   // In the hardened isolation container (ISOLATE_INSPECT) Chromium runs as non-root with caps dropped,
   // so its setuid sandbox can't initialize — disable it (the OUTER gVisor + container + network-block
@@ -2252,7 +2412,7 @@ export async function inspectLayout({ url, timeoutMs = 20000, screenshotPath } =
     process.env.ISOLATE_INSPECT ? { args: ["--no-sandbox", "--disable-setuid-sandbox", "--no-proxy-server"] } : {},
   );
   try {
-    const page = await browser.newPage({ viewport: { width: 1180, height: 1480 }, deviceScaleFactor: 1 });
+    const page = await browser.newPage({ viewport: { width: 1180, height: 2080 }, deviceScaleFactor: 1 }); // tall enough for 1080×1920 (9:16); all checks are canvas-relative so shorter formats are unaffected
     const blockedEgress = process.env.ISOLATE_INSPECT ? await isolatePageEgress(page) : null;
     await page.goto(url, { waitUntil: "networkidle", timeout: timeoutMs });
     const canvas = await page.waitForSelector("#post-canvas", { timeout: timeoutMs });
@@ -2262,6 +2422,12 @@ export async function inspectLayout({ url, timeoutMs = 20000, screenshotPath } =
     if (screenshotPath) {
       await canvas.screenshot({ path: screenshotPath });
       report.screenshot = screenshotPath;
+    }
+    // Isolated screenshot of just the VISUALIZATION region (PostFrame's <main data-viz>) — the anti-frozen
+    // check (qa.mjs) diffs this region across two frames to see if the main visual actually animates.
+    if (vizShotPath) {
+      const vizEl = await page.$("#post-canvas [data-viz]");
+      if (vizEl) { await vizEl.screenshot({ path: vizShotPath }); report.vizShot = vizShotPath; }
     }
     if (blockedEgress) report.blockedEgress = blockedEgress; // egress the untrusted page attempted (all denied)
     return report;

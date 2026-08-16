@@ -39,8 +39,6 @@ import {
   SETTLE_DEADLINE,
   PLOT_X0,
   PLOT_X1,
-  PLOT_Y0,
-  BASELINE_Y,
 } from "../src/lib/area.ts";
 import { niceMax } from "../src/lib/bars.ts";
 
@@ -225,25 +223,34 @@ async function geometrySuite(page) {
   for (const id of ANIM_FIXTURES) {
     const spec = JSON.parse(await readFile(fixturePath(id), "utf8"));
     const v = spec.visualization;
-    const plan = planArea({ series: v.series, xLabels: v.xLabels, mode: v.mode, valueLabels: v.valueLabels, axisMin: v.axisMin, axisMax: v.axisMax, unit: v.unit, annotations: v.annotations });
-    console.log(`Sampled-t DOM pass — ${id} (${plan.mode}, t ∈ {${T_SAMPLES.join(", ")}}):`);
 
     const reports = await sampleFixture(page, id, T_SAMPLES);
     const base = reports[1];
     const A = base.area;
     if (!check(!!A, "area section present at t=1")) continue;
 
+    // PL-0.8 — plan with the RENDERED row-aware viewBox height (the qa-scatter/histogram pattern)
+    // so the planner's geometry matches what the renderer actually painted.
+    const plan = planArea({ series: v.series, xLabels: v.xLabels, mode: v.mode, valueLabels: v.valueLabels, axisMin: v.axisMin, axisMax: v.axisMax, unit: v.unit, annotations: v.annotations, viewH: A.viewH });
+    const G = plan.vgeom;
+    console.log(`Sampled-t DOM pass — ${id} (${plan.mode}, viewH=${A.viewH}, t ∈ {${T_SAMPLES.join(", ")}}):`);
+
     // Degenerate (all-zero / single-point) fixtures may render no paths; the planner-level degenerate
     // handling is covered in the unit suite. Still assert gating cleanliness + node-count stability.
-    const sx = A.scaleX;
+    // preserveAspectRatio="meet": convert viewBox→CSS at the ONE uniform scale + centering offsets
+    // (the qa-histogram letterbox lesson) — per-axis scales overstate the slack axis.
+    const su = Math.min(A.scaleX, A.scaleY);
+    const offX = (A.rect.w - 1000 * su) / 2;
+    const offY = (A.rect.h - A.viewH * su) / 2;
+    const sx = su;
     const svgLeft = A.rect.x;
     const svgTop = A.rect.y;
-    const plotXcss = (vx) => svgLeft + vx * sx;
-    const plotYcss = (vy) => svgTop + vy * A.scaleY;
+    const plotXcss = (vx) => svgLeft + offX + vx * su;
+    const plotYcss = (vy) => svgTop + offY + vy * su;
     const bandLeft = plotXcss(PLOT_X0);
     const bandRight = plotXcss(PLOT_X1);
-    const bandTop = plotYcss(PLOT_Y0);
-    const bandBottom = plotYcss(BASELINE_Y);
+    const bandTop = plotYcss(G.PLOT_Y0);
+    const bandBottom = plotYcss(G.BASELINE_Y);
     const xSpan = PLOT_X1 - PLOT_X0;
 
     // C-caps — rendered series count == planArea post-clamp at every sample.
@@ -321,24 +328,25 @@ async function geometrySuite(page) {
     }
     check(bandOk, "area-within-plot: every painted fill+edge ⊆ the plot band at every t; nothing clipped (C-within-plot)", bandDetail);
 
-    // C-value-axis — the top-edge vertex y at each x == BASELINE_Y − scaleLinear(value/runningSum).
+    // C-value-axis — the top-edge vertex y at each x == baselineY − scaleLinear(value/runningSum),
+    // using the EFFECTIVE (row-aware) bounds the renderer drew with (plan.vgeom).
     // Asserted against the PLAN (the renderer paints the plan's path verbatim, byte-checked above).
     const span = plan.axisMax - plan.axisMin || 1;
-    const growLen = BASELINE_Y - PLOT_Y0;
+    const growLen = G.BASELINE_Y - G.PLOT_Y0;
     let axisOk = true, axisDetail = "";
     for (let si = 0; si < plan.series.length; si++) {
       const ps = plan.series[si];
       const tops = plan.mode === "stacked" ? ps.runningUpper : ps.values;
       for (let xi = 0; xi < ps.upper.length; xi++) {
-        const expectY = BASELINE_Y - (Math.max(0, Math.min(tops[xi], plan.axisMax)) / span) * growLen;
+        const expectY = G.BASELINE_Y - (Math.max(0, Math.min(tops[xi], plan.axisMax)) / span) * growLen;
         if (Math.abs(ps.upper[xi].y - expectY) > 0.6) { axisOk = false; axisDetail = `series ${si} x${xi} upper.y ${ps.upper[xi].y.toFixed(1)} ≠ scaleLinear ${expectY.toFixed(1)}`; }
       }
-      // baseline: simple lower edge sits at BASELINE_Y; stacked layer[0] lower at baseline.
+      // baseline: simple lower edge sits at the baseline; stacked layer[0] lower at baseline.
       if (si === 0 && ps.lower.length) {
-        if (Math.abs(ps.lower[0].y - BASELINE_Y) > 0.6) { axisOk = false; axisDetail = `series 0 lower edge not at baseline (${ps.lower[0].y})`; }
+        if (Math.abs(ps.lower[0].y - G.BASELINE_Y) > 0.6) { axisOk = false; axisDetail = `series 0 lower edge not at baseline (${ps.lower[0].y})`; }
       }
     }
-    check(axisOk, "value-axis correctness: top edge y == BASELINE_Y − scaleLinear(value/runningSum); baseline at y(0) (C-value-axis)", axisDetail);
+    check(axisOk, "value-axis correctness: top edge y == baselineY − scaleLinear(value/runningSum); baseline at y(0) (C-value-axis)", axisDetail);
 
     // C-labels — no two VISIBLE labels (x + end + legend) overlap > 4px at any sample; the visible
     // end-label SET at t=1 matches the plan show flags.

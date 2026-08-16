@@ -43,8 +43,6 @@ import {
   MARKER_START,
   PLOT_X0,
   PLOT_X1,
-  PLOT_Y0,
-  BASELINE_Y,
 } from "../src/lib/histogram.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -68,7 +66,9 @@ const check = (ok, name, detail = "") => {
 };
 const approx = (a, b, tol = 1e-6) => Math.abs(a - b) <= tol;
 
-const planFromViz = (v) =>
+// `viewH` is the RENDERED (row-aware, PL-0.8) viewBox height read back from the DOM — so the
+// planner's geometry matches what the renderer actually painted. Omitted → default 640.
+const planFromViz = (v, viewH) =>
   planHistogram({
     values: v.values,
     bins: v.bins,
@@ -82,6 +82,7 @@ const planFromViz = (v) =>
     axisMax: v.axisMax,
     valueLabels: v.valueLabels,
     accent: v.accent,
+    viewH,
   });
 
 // ── 1. Unit suite (pure — no DOM) ─────────────────────────────────────────────
@@ -210,24 +211,34 @@ const overlap = (A, B) => {
 async function geometrySuite(page) {
   for (const id of ANIM_FIXTURES) {
     const spec = JSON.parse(await readFile(fixturePath(id), "utf8"));
-    const plan = planFromViz(spec.visualization);
-    console.log(`Sampled-t DOM pass — ${id} (${plan.bins.length} bins, markers=${plan.markersKnob}, t ∈ {${T_SAMPLES.join(", ")}}):`);
 
     const reports = await sampleFixture(page, id, T_SAMPLES);
     const base = reports[1];
     const D = base.histogram;
     if (!check(!!D, "histogram section present at t=1")) continue;
 
+    // PL-0.8 — plan with the RENDERED row-aware viewBox height (the qa-scatter pattern) so the
+    // planner's geometry matches what the renderer actually painted.
+    const plan = planFromViz(spec.visualization, D.viewH);
+    console.log(`Sampled-t DOM pass — ${id} (${plan.bins.length} bins, markers=${plan.markersKnob}, viewH=${D.viewH}, t ∈ {${T_SAMPLES.join(", ")}}):`);
+
     const sx = D.scaleX;
     const sy = D.scaleY;
+    // preserveAspectRatio="meet": the svg draws at ONE uniform scale (min of the per-axis ratios),
+    // centered — when the panel box's aspect ≠ the viewBox aspect the svg letterboxes, and the raw
+    // per-axis scaleX/scaleY OVERSTATE the slack axis (the long-standing D-count drift on tall
+    // portrait panels). Convert viewBox→CSS with the uniform scale + the centering offsets.
+    const su = Math.min(sx, sy);
+    const offX = (D.rect.w - 1000 * su) / 2;
+    const offY = (D.rect.h - D.viewH * su) / 2;
     const svgLeft = D.rect.x;
     const svgTop = D.rect.y;
-    const plotXcss = (vx) => svgLeft + vx * sx;
-    const plotYcss = (vy) => svgTop + vy * sy;
+    const plotXcss = (vx) => svgLeft + offX + vx * su;
+    const plotYcss = (vy) => svgTop + offY + vy * su;
     const bandLeft = plotXcss(PLOT_X0);
     const bandRight = plotXcss(PLOT_X1);
-    const bandTop = plotYcss(PLOT_Y0);
-    const bandBottom = plotYcss(BASELINE_Y);
+    const bandTop = plotYcss(plan.plotY0);
+    const bandBottom = plotYcss(plan.baselineY);
 
     // D-cap — bin-count cap: rendered bin count == plan binCount ≤ 14 at every sample.
     check(
@@ -294,7 +305,7 @@ async function geometrySuite(page) {
 
     // D-count — count-axis correctness: each bin's full (t=1) painted height == scaleLinear(count)
     // from baseline; floored bins == MIN_BIN_PX; zero-count bins paint 0.
-    const growLenCss = (BASELINE_Y - PLOT_Y0) * sy;
+    const growLenCss = (plan.baselineY - plan.plotY0) * su;
     let countOk = true, countDetail = "";
     for (let bi = 0; bi < D.bins.length; bi++) {
       const planBin = plan.bins[bi];
@@ -304,7 +315,7 @@ async function geometrySuite(page) {
         continue;
       }
       const expectVbH = planBin.h; // viewBox px (already floored in the plan)
-      const expectCss = expectVbH * sy;
+      const expectCss = expectVbH * su;
       if (!painted) { countOk = false; countDetail = `bin ${bi} count≥1 but no painted rect`; continue; }
       if (Math.abs(painted.h - expectCss) > Math.max(2.5, expectCss * 0.05)) { countOk = false; countDetail = `bin ${bi} h ${painted.h.toFixed(1)} ≠ plan ${expectCss.toFixed(1)}`; }
     }

@@ -131,9 +131,11 @@ async function unitSuite() {
   check(zeroDrop.drops[1].show === false, "an empty-text drop is hidden");
 
   console.log("Label show/hide (C3/C4/C4b):");
-  const longLbl = planFunnel([S("x".repeat(30), 100), S("ok", 40)], "funnel", undefined, "cyan", "auto");
-  check(longLbl.bands[0].showLabel === false && longLbl.bands[0].labelHideReason === "tooLong", "stage label > 22cp → hidden (hide-not-shrink, C3)");
-  check(longLbl.bands[1].showLabel === true, "short stage label shows");
+  // C3 cap raised 22→36 (Emil's format-bench feedback: real stage names were silently hidden; the
+  // renderer textLength-compresses to the slot). 30cp now SHOWS; >36cp still hides.
+  const longLbl = planFunnel([S("x".repeat(30), 100), S("x".repeat(40), 40)], "funnel", undefined, "cyan", "auto");
+  check(longLbl.bands[0].showLabel === true, "stage label ≤ 36cp shows (compressed by the renderer, C3)");
+  check(longLbl.bands[1].showLabel === false && longLbl.bands[1].labelHideReason === "tooLong", "stage label > 36cp → hidden (hide-not-shrink, C3)");
   const longVal = planFunnel([S("a", 100, { valueText: "1234567890123" }), S("b", 40)], "funnel", undefined, "cyan", "auto");
   check(longVal.bands[0].showValue === false && longVal.bands[0].valueHideReason === "tooLong", "value string > 10cp → value label hidden (C4)");
   const dropsOff = planFunnel([S("a", 100), S("b", 40)], "funnel", undefined, "cyan", "off");

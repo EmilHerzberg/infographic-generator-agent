@@ -48,6 +48,8 @@
     "qa:ranges": "node tools/qa-ranges.mjs",
     "qa:pipeline": "node tools/qa-pipeline.mjs",
     "qa:render-truth": "node tools/render-truth.mjs",
+    "qa:formats": "node tools/qa-formats.mjs",
+    "qa:render-flutter": "node tools/qa-render-flutter.mjs",
     "fuzz:corpus": "node tools/make-fuzz-corpus.mjs",
     "provider:matrix": "node tools/provider-matrix.mjs",
     "schema:budget": "node tools/schema-budget.mjs",

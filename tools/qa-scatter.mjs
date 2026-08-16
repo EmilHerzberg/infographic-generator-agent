@@ -137,10 +137,11 @@ function unitSuite() {
   check(u4.points[0].showLabel === true, "short point label shown");
   check(u4.points[1].showLabel === false && u4.points[1].labelHideReason === "tooLong", "point label > 20cp → hidden(tooLong)");
   check(u4.dropped.hiddenPointLabels >= 1, "hidden point label surfaced", `got ${u4.dropped.hiddenPointLabels}`);
-  // two near-coincident labelled dots → later hidden on collision
+  // two near-coincident labelled dots → dot-aware placement: the later label FLIPS to the left side
+  // (or hides when no side is clean) — visible labels never overlap each other or another dot.
   const u4c = planScatter({ points: [{ x: 5, y: 5, label: "alpha" }, { x: 5.01, y: 5, label: "beta" }] });
-  const shown = u4c.points.filter((p) => p.showLabel).length;
-  check(shown < 2, "colliding labels → at least one hidden (greedy author-order)", `shown ${shown}`);
+  const laterOk = !u4c.points[1].showLabel || u4c.points[1].labelSide === "left";
+  check(laterOk, "colliding labels → later flips side or hides (dot-aware placement)", `shown ${u4c.points.filter((p) => p.showLabel).length}, side ${u4c.points[1].labelSide}`);
   check(u4c.points[0].showLabel === true, "earlier label kept on collision");
   // pointLabels:off → all hidden with reason off, NOT counted as a defect
   const u4off = planScatter({ points: [{ x: 1, y: 1, label: "a" }], pointLabels: "off" });
@@ -202,10 +203,15 @@ async function geometrySuite(page) {
     const { y0: PY0, y1: PY1 } = plotBounds(D.viewH);
     console.log(`Sampled-t DOM pass — ${id} (${plan.points.length} pts, trend=${plan.trendLine}, quad=${plan.quadrants}, viewH=${D.viewH}, t ∈ {${T_SAMPLES.join(", ")}}):`);
 
-    const sx = D.scaleX;
-    const sy = D.scaleY;
-    const svgLeft = D.rect.x;
-    const svgTop = D.rect.y;
+    // preserveAspectRatio="meet": the svg draws at ONE uniform scale (min of the per-axis ratios),
+    // centered — when the panel box's aspect ≠ the viewBox aspect the svg letterboxes, and the raw
+    // per-axis scaleX/scaleY OVERSTATE the slack axis (the qa-histogram letterbox class; here it
+    // showed as D4 y-only drift after the vertical-fill wrappers un-pinned the panel aspect).
+    // Convert viewBox→CSS with the uniform scale + the centering offsets.
+    const sx = Math.min(D.scaleX, D.scaleY);
+    const sy = sx;
+    const svgLeft = D.rect.x + (D.rect.w - 1000 * sx) / 2;
+    const svgTop = D.rect.y + (D.rect.h - D.viewH * sy) / 2;
     const cssX = (vx) => svgLeft + vx * sx;
     const cssY = (vy) => svgTop + vy * sy;
     const bandLeft = cssX(PLOT_X0);
