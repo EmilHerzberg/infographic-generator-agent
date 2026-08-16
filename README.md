@@ -85,8 +85,8 @@ You only need the key for the provider you pass to `--provider`. Set it in `.env
 | `deepseek`   | `DEEPSEEK_API_KEY`                             | `deepseek-v4-pro` |
 | `openai`     | `OPENAI_API_KEY`                              | `gpt-5.5`         |
 | `anthropic`  | `ANTHROPIC_API_KEY`                           | `claude-opus-4-8` |
-| `gemini`     | `GEMINI_API_KEY`                              | `gemini-2.5-pro`  |
-| `vertex`     | `GOOGLE_VERTEX_API_KEY` *or* a service account | `gemini-2.5-pro`  |
+| `gemini`     | `GEMINI_API_KEY`                              | `gemini-3.1-pro-preview` |
+| `vertex`     | `GOOGLE_VERTEX_API_KEY` *or* a service account | `gemini-3.1-pro-preview` |
 | `compatible` | `COMPATIBLE_API_KEY` (+ `COMPATIBLE_BASE_URL`) | `openrouter/auto` |
 
 `openai` is the **official** OpenAI API; `compatible` is **any OpenAI-compatible endpoint** (OpenRouter,

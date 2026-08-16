@@ -48,7 +48,7 @@ async function devServerReachable(base) {
   }
 }
 
-async function runOnce({ provider, modelId, id, brief }) {
+async function runOnce({ provider, modelId, id, brief, format }) {
   // Single-shot, ungated — quick drafting / offline use.
   const base$ = await loadRenderSchema(ROOT);
   const schema = schemaForProvider(base$, provider);
@@ -61,6 +61,7 @@ async function runOnce({ provider, modelId, id, brief }) {
   try {
     const { object } = await generateObject({ model, schema: jsonSchema(schema), system, prompt: brief, maxRetries: 2, abortSignal: llmCallSignal() });
     object.id = id;
+    if (format && format !== "portrait") object.format = format; // stamp the chosen aspect (absent ⇒ portrait)
     await writeFile(outPath, JSON.stringify(object, null, 2));
     console.error(`✔ wrote ${outPath} (single-shot, no gate). QA it: npm run qa -- ${id}`);
   } catch (err) {
@@ -85,10 +86,15 @@ async function main() {
   } catch {}
   const id = args.id || "render-post";
   const { modelId } = resolveModel(args.provider, { modelOverride: args.model });
+  // Validate --format loudly — a typo ("sqare") must not silently produce a portrait post.
+  if (args.format && !["portrait", "square", "vertical"].includes(args.format)) {
+    console.error(`✖ unknown --format "${args.format}" — use portrait | square | vertical`);
+    process.exit(1);
+  }
 
   if (args.once) {
     console.error(`→ ${args.provider} (${modelId}) generating "${id}" (single-shot, no gate)...`);
-    await runOnce({ provider: args.provider, modelId: args.model, id, brief: args.brief });
+    await runOnce({ provider: args.provider, modelId: args.model, id, brief: args.brief, format: args.format });
     return;
   }
 

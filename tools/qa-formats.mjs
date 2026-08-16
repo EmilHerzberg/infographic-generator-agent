@@ -35,7 +35,16 @@ const ADVERSARIAL = /overflow|stress|dense|overcount|cascade|ranked|shortrow|end
 const softened = (id) => ADVERSARIAL.test(id);
 
 async function main() {
-  let files = (await readdir(CORPUS)).filter((f) => f.endsWith(".render.json")).sort();
+  let files;
+  try {
+    files = (await readdir(CORPUS)).filter((f) => f.endsWith(".render.json")).sort();
+  } catch {
+    // The fixture corpus lives in planning/ and ships only with the full product repo — the
+    // open-source distribution doesn't include it. Exit clean with instructions, don't crash.
+    console.log(`No fixture corpus at ${CORPUS}.`);
+    console.log("Generate one first (node tools/make-fuzz-corpus.mjs) or run this gate in the full repo.");
+    process.exit(0);
+  }
   const ids = [];
   for (const f of files) {
     const spec = JSON.parse(await readFile(join(CORPUS, f), "utf8"));

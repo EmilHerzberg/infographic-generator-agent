@@ -160,13 +160,20 @@ async function main() {
   let success = isDone();
   if (!success) {
     const tc = await typecheckPost(id);
-    const qa = await runQA(id, { base, motion, judge: true, vision: true, brief: args.brief });
+    // format must reach the salvage gate too — omitting it re-verified square/vertical posts at portrait.
+    const qa = await runQA(id, { base, motion, judge: true, vision: true, brief: args.brief, format });
     success = tc.ok && qa.pass;
     if (success) console.error("✔ final gate check passed (loop ended before an explicit finish).");
     else console.error("findings:\n" + findingsForAgent(qa.findings));
   }
 
   if (success) {
+    // Non-portrait aspects ride the <id>.meta.json sidecar (generated.tsx reads it to size the
+    // composition) — without it the preview screenshot AND the Remotion MP4 silently render portrait.
+    if (format && format !== "portrait") {
+      await writeFile(join(ROOT, "src", "posts", "generated", `${id}.meta.json`), JSON.stringify({ id, format }));
+      console.error(`→ wrote ${id}.meta.json (format: ${format})`);
+    }
     const outPng = join(ROOT, "out", `${id}.png`);
     await renderPost(id, outPng, base);
     console.error(`✔ post passed gates → src/posts/generated/${id}.tsx · final-frame screenshot: out/${id}.png`);

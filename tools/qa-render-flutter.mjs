@@ -12,7 +12,7 @@
 //
 // Verified: fuzz-119-matrix-overflow flutters 28/181 frames multi-worker, 0/181 at --concurrency=1.
 import { spawnSync } from "node:child_process";
-import { readFileSync, copyFileSync, rmSync, mkdirSync } from "node:fs";
+import { readFileSync, copyFileSync, rmSync, mkdirSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { detectFlutter, loadFramesDir } from "./lib/flutter.mjs";
@@ -27,10 +27,17 @@ const specDst = join(ROOT, "src", "posts", "generated", `${CANARY}.render.json`)
 let failures = 0;
 const check = (ok, name, detail = "") => { if (!ok) failures++; console.log(`  ${ok ? "✔" : "✖"} ${name}${detail ? ` — ${detail}` : ""}`); };
 
-// 1. STATIC: the production render must pin --concurrency=1
-const renderSrc = readFileSync(join(ROOT, "server", "render", "render.mjs"), "utf8");
-const pinned = /"remotion",\s*"render"[\s\S]*?"--concurrency=1"/.test(renderSrc);
-check(pinned, "render.mjs pins --concurrency=1", pinned ? "" : "the production render must render single-worker or the flutter returns");
+// 1. STATIC: the production render must pin --concurrency=1. The server/ tree ships only in the
+// full product (the open-source distribution has no server) — skip the assertion there instead of
+// crashing; the CLEAN/CANARY checks below are the substance either way.
+const renderMjs = join(ROOT, "server", "render", "render.mjs");
+if (existsSync(renderMjs)) {
+  const renderSrc = readFileSync(renderMjs, "utf8");
+  const pinned = /"remotion",\s*"render"[\s\S]*?"--concurrency=1"/.test(renderSrc);
+  check(pinned, "render.mjs pins --concurrency=1", pinned ? "" : "the production render must render single-worker or the flutter returns");
+} else {
+  console.log("  · no server/ tree (open-source layout) — skipping the production-pin assertion");
+}
 
 function renderSeq(id, outDir, concurrency) {
   mkdirSync(outDir, { recursive: true });
