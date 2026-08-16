@@ -30,23 +30,39 @@ export function FitLine({
   const zoneRef = useRef<HTMLDivElement>(null);
   const textRef = useRef<HTMLSpanElement>(null);
   const [zoom, setZoom] = useState(1);
+  // ANTI-FLUTTER (the delegation-matrix single-frame glitch): the old shape measured once per
+  // [children] change and then let the ResizeObserver correct ASYNCHRONOUSLY — under Remotion's
+  // sequential frame capture a transient mid-animation measurement (zone read while an entrance
+  // was re-laying out → near-zero width) could land in state and paint for exactly one frame:
+  // the value collapsed to a sliver and the layout below shifted (zoom is layout-true). Fix =
+  // the FitZone architecture: settle SYNCHRONOUSLY on EVERY commit (each Remotion frame is a
+  // commit, so every painted frame carries a freshly verified fit), write the zoom onto the DOM
+  // pre-paint, and refuse implausible transient reads (a collapsed zone must never become a
+  // painted zoom — keep the last good fit instead).
+  const settle = () => {
+    const zone = zoneRef.current;
+    const txt = textRef.current;
+    if (!zone || !txt) return;
+    const zw = zone.clientWidth;
+    const cw = txt.offsetWidth; // natural (pre-zoom) width
+    if (zw < 8 || cw < 1) return; // transient/collapsed read — never paint it
+    const z = Math.min(1, Math.floor((zw / cw) * 1000) / 1000);
+    txt.style.zoom = String(z); // pre-paint DOM write — the frame being captured is already correct
+    setZoom((prev) => (Math.abs(prev - z) > 0.002 ? z : prev)); // keep React's model in sync
+  };
+  useLayoutEffect(() => { settle(); }); // no deps: re-verify before EVERY paint
   useLayoutEffect(() => {
     const zone = zoneRef.current;
     const txt = textRef.current;
     if (!zone || !txt) return;
-    const measure = () => {
-      const zw = zone.clientWidth;
-      const cw = txt.offsetWidth; // natural (pre-zoom) width
-      if (!zw || !cw) return;
-      const z = Math.min(1, Math.floor((zw / cw) * 1000) / 1000);
-      setZoom((prev) => (Math.abs(prev - z) > 0.002 ? z : prev));
-    };
-    measure();
-    const ro = new ResizeObserver(measure);
+    // Live-preview resizes (browser window, studio panes) still converge via the observer; its
+    // callback runs the same guarded settle, so it can no longer inject a bogus zoom.
+    const ro = new ResizeObserver(() => settle());
     ro.observe(zone);
     ro.observe(txt);
     return () => ro.disconnect();
-  }, [children]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   return (
     // Clip the x-axis ONLY (the axis FitLine guarantees via zoom). With `leading-none` the
     // font's content area (ascent+descent ≈ 1.14em) exceeds the 1em line box on EVERY value,
