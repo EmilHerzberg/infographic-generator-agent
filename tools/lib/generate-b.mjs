@@ -117,7 +117,11 @@ play safe. EITHER WAY the legibility gate is NON-NEGOTIABLE: the inspector REJEC
 is drawn through (textOccluded), any clipping, any collision, any sub-floor label, and any categorical mark (bar / pie or donut wedge / funnel stage) left UNLABELLED — a hand-rolled chart MUST label every one of its marks with its category and/or value. If a bespoke visual
 flags, ITERATE it clean — move labels OFF the lines, add gutters, reposition — do NOT ship overlaps, and
 do NOT abandon a strong bespoke idea for a generic primitive just to dodge the gate. A CLEAN ambitious
-visual beats a safe generic one; a BROKEN one loses to both.`;
+visual beats a safe generic one; a BROKEN one loses to both.
+HARD TEXT RULE: NEVER put whitespace-nowrap (white-space: nowrap) on multi-word text — a sentence that
+cannot wrap WILL clip on x at some width and NO rewording fixes it (a real run burned its whole budget
+rewriting the words seven times against the same 96px overflow). Sentences — takeaways, subtitles,
+captions — must be allowed to wrap; a long single-line VALUE belongs inside <FitLine> instead.`;
 
 export const MOTION_CONTRACT = `<<< MOTION (VIDEO) OUTPUT CONTRACT (Path B) >>>
 
@@ -190,7 +194,11 @@ play safe. EITHER WAY the legibility gate is NON-NEGOTIABLE: the inspector REJEC
 is drawn through (textOccluded), any clipping, any collision, any sub-floor label, and any categorical mark (bar / pie or donut wedge / funnel stage) left UNLABELLED — a hand-rolled chart MUST label every one of its marks with its category and/or value. If a bespoke visual
 flags, ITERATE it clean — move labels OFF the lines, add gutters, reposition — do NOT ship overlaps, and
 do NOT abandon a strong bespoke idea for a generic primitive just to dodge the gate. A CLEAN ambitious
-visual beats a safe generic one; a BROKEN one loses to both.`;
+visual beats a safe generic one; a BROKEN one loses to both.
+HARD TEXT RULE: NEVER put whitespace-nowrap (white-space: nowrap) on multi-word text — a sentence that
+cannot wrap WILL clip on x at some width and NO rewording fixes it (a real run burned its whole budget
+rewriting the words seven times against the same 96px overflow). Sentences — takeaways, subtitles,
+captions — must be allowed to wrap; a long single-line VALUE belongs inside <FitLine> instead.`;
 
 // The Path B tool set: read_file, list_dir, write_post, typecheck, inspect_layout, finish.
 // `isDone()` flips true only when finish() re-verifies every gate. Shared by agent.mjs (CLI) and
@@ -299,7 +307,16 @@ export function makePathBTools(id, base, ctx = {}) {
         // `checks` = the error-severity check CODES only (a fixed vocabulary, never free text) — the
         // live progress UI maps them to friendly labels; nothing model-authored crosses to the user.
         record({ t: "inspect", pass, errors: errs, regressed: !!regressed, stalledNudge: !!stalled, sinceBest, checks: findings.filter((f) => f.severity === "error").map((f) => f.check).slice(0, 8), findings: findingsForAgent(findings) }); // PL-6 R3
-        return { pass, findings: findingsForAgent(findings), ...(regressed ? { regressed } : {}), ...(stalled ? { stalled } : {}) };
+        // A green inspect is a state to LOCK IN, not a milestone to keep polishing past: observed runs
+        // (gpt-5.5, 32 steps) hit all-green mid-loop, kept editing, regressed into crashes, and burned
+        // the rest of the budget. Tell the model explicitly to call finish NOW.
+        return {
+          pass,
+          findings: findingsForAgent(findings),
+          ...(pass && !done ? { message: "ALL STRUCTURAL CHECKS PASSED — call finish NOW to lock this state in and run the final gates. Any further edit risks a regression that costs you the remaining budget." } : {}),
+          ...(regressed ? { regressed } : {}),
+          ...(stalled ? { stalled } : {}),
+        };
       },
     }),
     finish: tool({

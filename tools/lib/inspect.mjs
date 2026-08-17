@@ -140,8 +140,16 @@ export function measure() {
   for (const el of els) {
     const s = getComputedStyle(el);
     const cw = el.clientWidth, ch = el.clientHeight;
+    // Name the CAUSE when it's mechanical: an x-clip whose content (or the element itself) carries
+    // white-space:nowrap is unfixable by rewording — the agent must drop nowrap / use FitLine. Without
+    // this hint a real run rewrote the TEXT seven times against a constant 96px overflow and lost.
+    const hasNowrap = (node) => {
+      if (getComputedStyle(node).whiteSpace === "nowrap") return true;
+      for (const c of node.children) if (c instanceof HTMLElement && hasNowrap(c)) return true;
+      return false;
+    };
     if (/(hidden|clip|auto|scroll)/.test(s.overflowX) && cw > 0 && el.scrollWidth - cw > 3)
-      clipped.push({ el: elLabel(el), axis: "x", overflowPx: el.scrollWidth - cw });
+      clipped.push({ el: elLabel(el), axis: "x", overflowPx: el.scrollWidth - cw, ...(hasNowrap(el) ? { nowrap: true } : {}) });
     if (/(hidden|clip|auto|scroll)/.test(s.overflowY) && ch > 0 && el.scrollHeight - ch > 3)
       clipped.push({ el: elLabel(el), axis: "y", overflowPx: el.scrollHeight - ch });
   }
@@ -2397,6 +2405,28 @@ export async function isolatePageEgress(page) {
     blocked.push(u);
     return route.abort("blockedbyclient");
   });
+  // page.route does NOT intercept WebSocket/EventSource/WebRTC — stub them in the page so a
+  // malicious component can't open a raw socket past the request interception. Local WS stays
+  // allowed (Vite HMR). Blocked attempts are reported back for the red-team smoke.
+  await page.exposeFunction("__egressBlocked", (u) => blocked.push(String(u).slice(0, 300)));
+  await page.addInitScript(() => {
+    const LOCAL = /^(wss?):\/\/(localhost|127\.0\.0\.1|\[::1\])(:|\/|$)/i;
+    const report = (u) => { try { window.__egressBlocked(u); } catch { /* binding gone */ } };
+    const NativeWS = window.WebSocket;
+    const GuardedWS = function (url, protos) {
+      if (LOCAL.test(String(url))) return new NativeWS(url, protos);
+      report(url);
+      throw new DOMException("egress blocked", "SecurityError");
+    };
+    GuardedWS.prototype = NativeWS.prototype;
+    GuardedWS.CONNECTING = NativeWS.CONNECTING; GuardedWS.OPEN = NativeWS.OPEN;
+    GuardedWS.CLOSING = NativeWS.CLOSING; GuardedWS.CLOSED = NativeWS.CLOSED;
+    window.WebSocket = GuardedWS;
+    window.EventSource = function (url) { report(url); throw new DOMException("egress blocked", "SecurityError"); };
+    const NoRTC = function () { report("rtc:"); throw new DOMException("egress blocked", "SecurityError"); };
+    window.RTCPeerConnection = NoRTC;
+    window.webkitRTCPeerConnection = NoRTC;
+  });
   return blocked;
 }
 
@@ -2414,8 +2444,33 @@ export async function inspectLayout({ url, timeoutMs = 20000, screenshotPath, vi
   try {
     const page = await browser.newPage({ viewport: { width: 1180, height: 2080 }, deviceScaleFactor: 1 }); // tall enough for 1080×1920 (9:16); all checks are canvas-relative so shorter formats are unaffected
     const blockedEgress = process.env.ISOLATE_INSPECT ? await isolatePageEgress(page) : null;
+    // Capture the page's OWN errors — attached BEFORE goto: a model-authored component that crashes at
+    // MODULE LOAD (bad import — the dominant crash class) throws DURING goto; listeners attached after
+    // goto miss it, which is exactly why the first shipped version of this capture stayed empty. The
+    // real ReferenceError/import failure turns a 5-iteration guessing crash-loop into a one-step fix.
+    const pageErrors = [];
+    page.on("pageerror", (e) => { if (pageErrors.length < 5) pageErrors.push(String(e?.message || e).slice(0, 200)); });
+    page.on("console", (m) => { if (m.type() === "error" && pageErrors.length < 5) pageErrors.push(String(m.text()).slice(0, 200)); });
+    // A failed MODULE load (bad import path → Vite 500/404) is the dominant crash class — name the
+    // exact module URL, and for a Vite transform error pull the response body's first line, which
+    // carries the money quote ("Failed to resolve import \"…\""). Async best-effort push: the reader
+    // races the waitForSelector timeout, and a late line simply misses the message (never throws).
+    page.on("response", (r) => {
+      if (r.status() < 400 || pageErrors.length >= 5) return;
+      const head = `HTTP ${r.status()} loading ${r.url().slice(0, 160)}`;
+      r.text().then(
+        (body) => { const line = String(body || "").split("\n").find((l) => l.trim()) || ""; pageErrors.push(`${head}${line ? ` — ${line.slice(0, 200)}` : ""}`); },
+        () => pageErrors.push(head),
+      );
+    });
     await page.goto(url, { waitUntil: "networkidle", timeout: timeoutMs });
-    const canvas = await page.waitForSelector("#post-canvas", { timeout: timeoutMs });
+    let canvas;
+    try {
+      canvas = await page.waitForSelector("#post-canvas", { timeout: timeoutMs });
+    } catch (e) {
+      const detail = pageErrors.length ? ` | page errors: ${pageErrors.slice(0, 3).join(" · ")}` : "";
+      throw new Error(`${e?.message || e}${detail}`);
+    }
     await page.evaluate(() => document.fonts && document.fonts.ready);
     await page.waitForTimeout(350); // settle fonts/animations to final state
     const report = await page.evaluate(measure);

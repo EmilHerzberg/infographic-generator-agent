@@ -33,7 +33,7 @@ function structuralFindings(r) {
   const add = (check, severity, message, data) => f.push({ check, severity, message, data });
 
   for (const c of r.collisions || []) add("collision", "error", `"${c.a}" overlaps "${c.b}" by ${c.overlapPx}px`, c);
-  for (const c of r.clipped || []) add("clipped", "error", `${c.el} is clipped on ${c.axis} (overflow ${c.overflowPx}px) — content is cut off`, c);
+  for (const c of r.clipped || []) add("clipped", "error", `${c.el} is clipped on ${c.axis} (overflow ${c.overflowPx}px) — content is cut off${c.nowrap ? ". CAUSE: white-space:nowrap forbids wrapping — REMOVE the nowrap (let it wrap) or put the line in a <FitLine> — rewording alone cannot fix this" : ""}`, c);
   for (const o of r.textOccluded || []) add("textOccluded", "error", `${o.el} is drawn over by a ${o.byRole} (${o.hits} samples cross the lettering) — the graphic occludes the text, making it unreadable; move the label or the line apart`, o);
   for (const o of r.textOverflowsBox || []) add("textOverflowsBox", "error", `"${o.el}" is wider than its box (spills ${o.overflowPx}px past both sides of a ${o.boxWidthPx}px container) — the label paints outside the box border; widen the box, shorten the label, or shrink the text`, o);
   if (r.crowded) add("crowded", "error", `over-crowded: text covers ${Math.round(r.textCoverage * 100)}% of the canvas (max ~${Math.round((r.crowdedCap ?? 0.42) * 100)}% on this aspect) — remove secondary elements`, { textCoverage: r.textCoverage, crowdedCap: r.crowdedCap });
