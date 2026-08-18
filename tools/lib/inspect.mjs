@@ -148,9 +148,38 @@ export function measure() {
       for (const c of node.children) if (c instanceof HTMLElement && hasNowrap(c)) return true;
       return false;
     };
-    if (/(hidden|clip|auto|scroll)/.test(s.overflowX) && cw > 0 && el.scrollWidth - cw > 3)
+    // DECORATIVE BLEED is not clipping: an ambient glow (textless, pointer-events:none, absolutely
+    // offset past the edge — the Panel-overlay idiom) inflates scrollWidth by design and paints no
+    // content that could be "cut off". If EVERY box protruding past the edge is such a decoration,
+    // the overflow is intentional. (A real bar/label sticking out still flags — those carry text or
+    // pointer events.) A model once burned a full 32-step budget against a -right-24 glow's 31px.
+    const onlyDecorativeBeyond = (axis) => {
+      const r = el.getBoundingClientRect();
+      const edge = axis === "x" ? r.left + el.clientLeft + cw : r.top + el.clientTop + ch;
+      let sawOffender = false;
+      for (const d of el.querySelectorAll("*")) {
+        const b = d.getBoundingClientRect();
+        const ds = getComputedStyle(d);
+        // Two offender shapes: a BOX crossing the ancestor's content edge, or TEXT spilling out of its
+        // own box with visible overflow (the nowrap sentence: its 500px box stays inside, the glyphs
+        // don't — box-crossing alone misses it and would have skipped a REAL clip).
+        const beyondBox = (axis === "x" ? b.right > edge + 3 : b.bottom > edge + 3) && b.width > 0 && b.height > 0;
+        // Only a box whose OWN inline text spills counts — an intermediate container "spills" merely
+        // because the decorative child inside it crosses its edge; attributing the glow's geometry to
+        // the text-bearing wrapper would re-flag the bleed.
+        const hasDirectText = [...d.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim());
+        const spillsText = hasDirectText && (axis === "x"
+          ? ds.overflowX === "visible" && d.scrollWidth - d.clientWidth > 3
+          : ds.overflowY === "visible" && d.scrollHeight - d.clientHeight > 3);
+        if (!beyondBox && !spillsText) continue;
+        sawOffender = true;
+        if ((d.textContent || "").trim() || ds.pointerEvents !== "none") return false;
+      }
+      return sawOffender; // all offenders decorative → intentional bleed
+    };
+    if (/(hidden|clip|auto|scroll)/.test(s.overflowX) && cw > 0 && el.scrollWidth - cw > 3 && !onlyDecorativeBeyond("x"))
       clipped.push({ el: elLabel(el), axis: "x", overflowPx: el.scrollWidth - cw, ...(hasNowrap(el) ? { nowrap: true } : {}) });
-    if (/(hidden|clip|auto|scroll)/.test(s.overflowY) && ch > 0 && el.scrollHeight - ch > 3)
+    if (/(hidden|clip|auto|scroll)/.test(s.overflowY) && ch > 0 && el.scrollHeight - ch > 3 && !onlyDecorativeBeyond("y"))
       clipped.push({ el: elLabel(el), axis: "y", overflowPx: el.scrollHeight - ch });
   }
   // SVG <text> clipped by its viewBox (e.g. a left-anchored "100%" axis label whose
