@@ -2497,7 +2497,13 @@ export async function inspectLayout({ url, timeoutMs = 20000, screenshotPath, vi
     try {
       canvas = await page.waitForSelector("#post-canvas", { timeout: timeoutMs });
     } catch (e) {
-      const detail = pageErrors.length ? ` | page errors: ${pageErrors.slice(0, 3).join(" · ")}` : "";
+      // Two crash shapes need two messages: WITH page errors → name them (bad import / runtime throw).
+      // WITHOUT any error → the page loaded fine but the canvas never appeared: the component mounts
+      // nothing (missing PostFrame root / a hung suspense / early return null) — telling the agent
+      // "likely a runtime error" here sent it typechecking clean code in circles.
+      const detail = pageErrors.length
+        ? ` | page errors: ${pageErrors.slice(0, 3).join(" · ")}`
+        : " | NO page errors were thrown — the page loaded but #post-canvas never appeared: the component likely renders nothing (its default export must return <PostFrame …> synchronously; no async component, no conditional early-return null at t=1)";
       throw new Error(`${e?.message || e}${detail}`);
     }
     await page.evaluate(() => document.fonts && document.fonts.ready);

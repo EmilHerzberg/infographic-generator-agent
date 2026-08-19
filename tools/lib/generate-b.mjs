@@ -323,11 +323,23 @@ export function makePathBTools(id, base, ctx = {}) {
       description: "Declare the post done. Re-verifies ALL gates (typecheck + structural + motion + data-fidelity + vision). Only call when the post is complete.",
       inputSchema: z.object({}),
       execute: async () => {
-        const tc = await typecheckPost(id);
-        const qa = await runQA(id, { base, motion, judge: true, vision: true, brief, format });
+        // Every finish attempt MUST leave a transcript entry — a throwing finish (judge/vision call
+        // error) previously recorded NOTHING, and a real run burned 20 invisible steps re-calling it.
+        let tc, qa;
+        try {
+          tc = await typecheckPost(id);
+          qa = await runQA(id, { base, motion, judge: true, vision: true, brief, format });
+        } catch (e) {
+          record({ t: "finish", threw: true, reason: String(e?.message || e).slice(0, 200) });
+          throw e;
+        }
         const ok = tc.ok && qa.pass;
         if (ok) done = true;
-        record({ t: "finish", ok, qaPass: qa.pass, typecheckOk: tc.ok }); // PL-6 R3
+        record({
+          t: "finish", ok, qaPass: qa.pass, typecheckOk: tc.ok,
+          // WHICH gate said no — the failing checks make a finish-churn loop diagnosable post-hoc.
+          ...(ok ? {} : { checks: (qa.findings || []).filter((f) => f.severity === "error" || f.severity === "warn").map((f) => f.check).slice(0, 8) }),
+        }); // PL-6 R3
         return {
           ok,
           typecheckOk: tc.ok,
