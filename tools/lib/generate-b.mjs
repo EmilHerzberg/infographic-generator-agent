@@ -407,6 +407,9 @@ export async function generatePostB({ brief, provider, model: modelId, apiKey, r
   const tokRef = { v: 0 }; // running token total, updated per step — feeds the live progress entries
   const { tools, isDone, getBest, getTranscript, isStalled, record, flushTranscript } = makePathBTools(id, base, { brief, motion, provider, format, root, tokRef });
 
+  // First transcript entry the moment the loop is LIVE (vite up, model called): flips the user-facing
+  // phase from "starting the environment" to "planning" long before the first write lands.
+  record({ t: "start" });
   log(`Path B: ${provider} building ${motion ? "VIDEO" : "still"} "${id}" — up to ${maxSteps} steps...`);
   // LOOP-CONTINUATION (the gemini early-quit class, reproduced 3×): some models answer the build order
   // with PROSE and stop emitting tool calls — generateText then ends its tool loop after ~1 step with
