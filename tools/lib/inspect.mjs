@@ -2504,7 +2504,11 @@ export async function inspectLayout({ url, timeoutMs = 20000, screenshotPath, vi
       const detail = pageErrors.length
         ? ` | page errors: ${pageErrors.slice(0, 3).join(" · ")}`
         : " | NO page errors were thrown — the page loaded but #post-canvas never appeared: the component likely renders nothing (its default export must return <PostFrame …> synchronously; no async component, no conditional early-return null at t=1)";
-      throw new Error(`${e?.message || e}${detail}`);
+      // SINGLE LINE: downstream formatters keep only the first line of this message (qa.mjs wraps it
+      // into the render finding via split("\n")[0]) — appending the diagnosis after Playwright's
+      // multi-line call log silently dropped it, and two crash-loops shipped with a bare timeout.
+      const firstLine = String(e?.message || e).split("\n")[0];
+      throw new Error(`${firstLine}${detail}`);
     }
     await page.evaluate(() => document.fonts && document.fonts.ready);
     await page.waitForTimeout(350); // settle fonts/animations to final state
