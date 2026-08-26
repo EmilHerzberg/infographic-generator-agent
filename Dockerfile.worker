@@ -1,0 +1,40 @@
+# Epic 06 — render worker image. Bundles Chromium deps + Remotion's headless Chrome so renders run
+# with NO network at runtime (--network none under gVisor). The orchestrator runs this per job with
+# --runtime=runsc, resource caps, read-only rootfs, and a single mounted /work dir (spec in, mp4 out).
+#   docker build -f Dockerfile.worker -t mcg-render:latest .
+FROM node:22-slim
+
+# Headless-Chromium runtime libraries
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      libnss3 libdbus-1-3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libxkbcommon0 \
+      libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2 libpango-1.0-0 \
+      libcairo2 libatspi2.0-0 fonts-liberation ca-certificates \
+      fonts-dejavu-core \
+      ffmpeg \
+  && rm -rf /var/lib/apt/lists/*
+# fonts-dejavu-core is the Unicode FALLBACK: the bundled brand subsets (Space Grotesk / JetBrains
+# Mono) omit the Superscripts-and-Subscripts block (U+2070, U+2074–2079) and other symbols, so on a
+# minimal Linux render container Chromium had NO fallback and painted "?" tofu (¹²³ survived — those
+# are the older Latin-1 superscripts the subset keeps). This is invisible to layout QA (tofu has
+# normal width). DejaVu covers superscripts, arrows and currencies; the brand fonts still render all
+# normal text.
+# ffmpeg: frame extraction for the post-render flutter gate (server/render/render.mjs) — the
+# single-frame measured-fit glitch only exists in the RENDERED sequence, so it is checked there.
+
+WORKDIR /app
+COPY package.json package-lock.json* ./
+RUN npm ci --omit=dev 2>/dev/null || npm install --omit=dev
+COPY server ./server
+COPY tools ./tools
+COPY context ./context
+COPY schemas ./schemas
+COPY src ./src
+COPY brand.config.json remotion.config.ts tailwind.config.ts postcss.config.js tsconfig.json ./
+
+# Pre-fetch Remotion's Chrome Headless Shell into the image so rendering needs no network.
+RUN npx remotion browser ensure || true
+
+# The generated-spec dir and Remotion's cache must be writable at runtime; the container is launched
+# read-only with tmpfs mounts for these (see server/render/dispatch.mjs). Render as non-root.
+USER node
+CMD ["node", "server/render/worker-entry.mjs"]

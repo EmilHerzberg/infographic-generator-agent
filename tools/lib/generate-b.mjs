@@ -121,7 +121,12 @@ visual beats a safe generic one; a BROKEN one loses to both.
 HARD TEXT RULE: NEVER put whitespace-nowrap (white-space: nowrap) on multi-word text — a sentence that
 cannot wrap WILL clip on x at some width and NO rewording fixes it (a real run burned its whole budget
 rewriting the words seven times against the same 96px overflow). Sentences — takeaways, subtitles,
-captions — must be allowed to wrap; a long single-line VALUE belongs inside <FitLine> instead.`;
+captions — must be allowed to wrap; a long single-line VALUE belongs inside <FitLine> instead.
+GLYPH RULE: the brand fonts carry ASCII + common Latin symbols (× ÷ → ↑ ↓ · € £ ¥ ° % and the OLD
+superscripts ¹ ² ³). A DejaVu fallback covers most other symbols, but do NOT rely on rare Unicode for
+DATA the viewer must read — write powers as "10^9" or "4.7e9" (NOT 10⁹ with U+2074-2079 superscripts,
+which can render as a "?" box), avoid CJK / emoji as chart values, and prefer a spelled-out or ASCII
+form whenever a glyph is load-bearing.`;
 
 export const MOTION_CONTRACT = `<<< MOTION (VIDEO) OUTPUT CONTRACT (Path B) >>>
 
@@ -198,7 +203,12 @@ visual beats a safe generic one; a BROKEN one loses to both.
 HARD TEXT RULE: NEVER put whitespace-nowrap (white-space: nowrap) on multi-word text — a sentence that
 cannot wrap WILL clip on x at some width and NO rewording fixes it (a real run burned its whole budget
 rewriting the words seven times against the same 96px overflow). Sentences — takeaways, subtitles,
-captions — must be allowed to wrap; a long single-line VALUE belongs inside <FitLine> instead.`;
+captions — must be allowed to wrap; a long single-line VALUE belongs inside <FitLine> instead.
+GLYPH RULE: the brand fonts carry ASCII + common Latin symbols (× ÷ → ↑ ↓ · € £ ¥ ° % and the OLD
+superscripts ¹ ² ³). A DejaVu fallback covers most other symbols, but do NOT rely on rare Unicode for
+DATA the viewer must read — write powers as "10^9" or "4.7e9" (NOT 10⁹ with U+2074-2079 superscripts,
+which can render as a "?" box), avoid CJK / emoji as chart values, and prefer a spelled-out or ASCII
+form whenever a glyph is load-bearing.`;
 
 // The Path B tool set: read_file, list_dir, write_post, typecheck, inspect_layout, finish.
 // `isDone()` flips true only when finish() re-verifies every gate. Shared by agent.mjs (CLI) and
